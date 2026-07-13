@@ -30,6 +30,11 @@ LLM_BASE_URL=https://api.deepseek.com/chat/completions
 LLM_MODEL=deepseek-chat
 LLM_SSL_VERIFY=1
 SERVICE_FEE_USDT=10
+X402_ENABLED=1
+X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
+X402_PRICE=$10.00
+X402_NETWORK=eip155:84532
+X402_SCHEME=exact
 INVESTMENT_WINDOW_SIZE=20
 INVESTMENT_MAX_PER_WINDOW=1
 ```
@@ -87,4 +92,15 @@ For an API service:
 }
 ```
 
-Payment gate status is intentionally `X402_ENABLED=0` until the OKX Payment SDK integration is added.
+## x402 Payment Gate
+
+The deployed `/evaluate` endpoint is protected by x402 when:
+
+```bash
+X402_ENABLED=1
+X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
+X402_PRICE=$10.00
+X402_NETWORK=eip155:84532
+```
+
+Unauthenticated callers receive HTTP 402. Clients pay, then replay the same request with the x402 payment signature header.

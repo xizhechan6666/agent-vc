@@ -7,6 +7,7 @@ ENV PORT=8787
 
 WORKDIR /app
 COPY . /app
+RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8787
-CMD ["python", "app.py"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8787"]

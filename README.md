@@ -19,6 +19,13 @@ cd /Users/xizhe/agent-vc
 python3 app.py
 ```
 
+For the production FastAPI/x402 entrypoint:
+
+```bash
+pip install -r requirements.txt
+uvicorn server:app --host 127.0.0.1 --port 8787
+```
+
 Health check:
 
 ```bash
@@ -82,6 +89,8 @@ Default rule: at most 1 investment candidate per 20 paid evaluations, and only i
 - `GET /openapi.json`
 - `POST /interview`
 - `POST /evaluate`
+
+When `X402_ENABLED=1`, `POST /evaluate` returns HTTP 402 until the caller supplies a valid x402 payment signature.
 
 `POST /evaluate` input shape:
 
