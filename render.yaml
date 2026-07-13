@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: agent-vc
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8787
+      - key: LLM_BASE_URL
+        value: https://api.deepseek.com/chat/completions
+      - key: LLM_MODEL
+        value: deepseek-chat
+      - key: LLM_SSL_VERIFY
+        value: 1
+      - key: SERVICE_FEE_USDT
+        value: 10
+      - key: INVESTMENT_WINDOW_SIZE
+        value: 20
+      - key: INVESTMENT_MAX_PER_WINDOW
+        value: 1
+      - key: X402_ENABLED
+        value: 0
