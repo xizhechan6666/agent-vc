@@ -2,9 +2,11 @@ services:
   - type: web
     name: agent-vc
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
+      - key: LLM_API_KEY
+        sync: false
       - key: HOST
         value: 0.0.0.0
       - key: PORT

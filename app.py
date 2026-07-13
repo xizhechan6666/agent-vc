@@ -574,6 +574,9 @@ def base_url(handler: BaseHTTPRequestHandler) -> str:
     public_base = os.getenv("PUBLIC_BASE_URL")
     if public_base:
         return public_base.rstrip("/")
+    render_external_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+    if render_external_hostname:
+        return f"https://{render_external_hostname}".rstrip("/")
     host = handler.headers.get("Host", f"{os.getenv('HOST', '127.0.0.1')}:{os.getenv('PORT', '8787')}")
     return f"{proto}://{host}".rstrip("/")
 

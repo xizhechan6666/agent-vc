@@ -36,6 +36,8 @@ INVESTMENT_MAX_PER_WINDOW=1
 
 Do not commit API keys.
 
+On Render, `LLM_API_KEY` is defined with `sync: false` in `render.yaml`, so Render prompts you for the value in the dashboard instead of storing it in Git.
+
 ## Docker
 
 Build locally:
@@ -59,7 +61,6 @@ docker run --rm -p 8787:8787 \
 
 ```text
 LLM_API_KEY
-PUBLIC_BASE_URL
 ```
 
 After deploy, open:
@@ -69,6 +70,8 @@ https://YOUR_RENDER_URL/a2mcp.json
 ```
 
 Copy `service.endpoint`, `service.fee`, `service.serviceName`, and `service.serviceDescription` into the OKX.AI ASP service registration flow.
+
+The included Render plan is `free` to avoid accidental charges. Free web services can spin down when idle and their local SQLite data is not persistent. Upgrade the instance type when you need 24/7 availability.
 
 ## OKX.AI Registration Fields
 
