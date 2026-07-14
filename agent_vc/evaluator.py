@@ -203,15 +203,27 @@ def build_client_summary(report: dict[str, Any], gate: dict[str, Any], report_ur
     short_verdict = str(memo.get("investment_decision") or report.get("one_line_verdict") or gate.get("reason") or "")
     if len(short_verdict) > 180:
         short_verdict = short_verdict[:177].rstrip() + "..."
+    headline = str(gate.get("headline") or report.get("one_line_verdict") or "")
+    score_line = f"总分 {score}/100，判断置信度：{confidence_label(confidence)}。"
+    primary_next_step = _first_list_item(gate.get("next_steps"), "打开完整报告链接，查看评分卡、证据审查和 7 天执行计划。")
+    chat_summary = f"{headline} {score_line} {short_verdict}"
+    shareable_text = (
+        f"{report.get('project_name', '项目')} 完成 NVC Agent VC 测评："
+        f"{score_line}{headline} 完整报告：{report_url}"
+    )
     return {
-        "headline": str(gate.get("headline") or report.get("one_line_verdict") or ""),
+        "headline": headline,
         "short_verdict": short_verdict,
-        "score_line": f"总分 {score}/100，判断置信度：{confidence_label(confidence)}。",
+        "score_line": score_line,
         "award_line": f"投资支持 {int(gate.get('award_amount_usdt', 0))} USDT；推广支持最高 {int(gate.get('promotion_support_usdt', 0))} USDT。",
         "primary_gap": primary_gap,
         "next_action": "打开完整报告链接，查看评分卡、证据审查和 7 天执行计划。",
         "report_url": report_url,
         "contact": default_contact_cta(),
+        "chat_summary": chat_summary,
+        "result_first_message": headline,
+        "founder_next_action": primary_next_step,
+        "shareable_text": shareable_text,
     }
 
 

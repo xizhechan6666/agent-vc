@@ -113,6 +113,10 @@ REPORT_SCHEMA_HINT = {
         "next_action": "string",
         "report_url": "string",
         "contact": "string",
+        "chat_summary": "string",
+        "result_first_message": "string",
+        "founder_next_action": "string",
+        "shareable_text": "string",
     },
     "memo_sections": {
         "investment_decision": "string, 2-4 sentences, direct decision and why",
