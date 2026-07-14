@@ -32,7 +32,7 @@ GET /
 - Product introduction.
 - Project draft form.
 - Paid-call instructions.
-- No free full report.
+- Complete report generation is reserved for the paid Agent Client flow.
 - No database write.
 - No investment quota decision.
 
@@ -48,7 +48,7 @@ POST /evaluate
 - Returns a private tokenized HTML report link.
 - Applies duplicate checks and investment quota.
 
-`POST /demo/evaluate` is disabled by default and returns 403 unless explicitly enabled for internal testing.
+`POST /demo/evaluate` is restricted by default and returns 403 unless explicitly enabled for controlled internal testing.
 
 ## Public Endpoints
 
@@ -100,7 +100,7 @@ X402_SCHEME=exact
 
 Unauthenticated calls to `/evaluate` return HTTP 402 with a `PAYMENT-REQUIRED` header. The header contains x402 v2 requirements and Bazaar discovery metadata.
 
-The current x402 Python SDK provides a default USDC asset for `eip155:84532`. Do not switch payment to X Layer `eip155:196` until the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed.
+The current x402 Python SDK provides a default USDC asset for `eip155:84532`. Keep this payment network unchanged unless the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed for `eip155:196`.
 
 ## Response Contract
 
@@ -191,7 +191,7 @@ curl -s http://127.0.0.1:8787/interview \
   --data @sample_request.json
 ```
 
-Generate a local report only when x402 is disabled:
+Generate a local report in a controlled no-x402 development run:
 
 ```bash
 curl -s http://127.0.0.1:8787/evaluate \
@@ -214,7 +214,7 @@ X402_SCHEME=exact
 DEMO_EVALUATE_ENABLED=0
 ```
 
-Do not commit API keys.
+Keep API keys in environment variables only.
 
 ## Verification
 

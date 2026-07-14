@@ -1,7 +1,7 @@
 {
   "project": {
-    "name": "Demo Alpha Agent",
-    "agent_url": "https://www.okx.ai/zh-hans/agents/demo",
+    "name": "NVC Assessment Agent",
+    "agent_url": "https://www.okx.ai/zh-hans",
     "one_liner": "帮助 OKX.AI Agent 创业者把产品包装成可成交的付费服务。",
     "target_user": "已经有 Agent 原型、但不知道如何定价和获得首批用户的 OKX.AI ASP。",
     "problem": "很多 Agent 只是功能演示，缺少清晰付费场景、增长路径和投资叙事。",

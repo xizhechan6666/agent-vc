@@ -32,7 +32,7 @@ Agent VC has two separate surfaces:
 
 1. Human web page
    - Used for product explanation, project draft collection, and paid-call instructions.
-   - Does not generate a free full report.
+   - Complete report generation is reserved for the paid Agent Client flow.
    - Does not write to the investment database.
    - Does not consume investment quota.
 
@@ -44,7 +44,7 @@ Agent VC has two separate surfaces:
    - Applies duplicate checks and quota gating.
    - Returns `report_url` pointing to `/agent/reports/{report_token}`.
 
-`POST /demo/evaluate` is intentionally disabled by default. It returns 403 unless `DEMO_EVALUATE_ENABLED=1`.
+`POST /demo/evaluate` is restricted by default. It returns 403 unless `DEMO_EVALUATE_ENABLED=1` is explicitly set for controlled internal testing.
 
 ## A2MCP And x402 Flow
 
@@ -109,7 +109,7 @@ Current implementation:
 - Supports X Layer-style EVM wallet addresses.
 - Creates an OKLink X Layer explorer URL.
 - Distinguishes unverified submitted addresses from ownership-supported addresses.
-- Does not claim full transaction forensics yet.
+- Provides lightweight verification; deeper transaction graph analysis is outside the current automated scope.
 
 Deeper transaction graph analysis should be added only after the X Layer indexing/API source is confirmed.
 
@@ -123,7 +123,7 @@ X402_NETWORK=eip155:84532
 X402_SCHEME=exact
 ```
 
-The current x402 Python SDK provides a default USDC asset for `eip155:84532`. X Layer identity and Agent wallet verification remain X Layer-oriented, but the payment network should not be switched to `eip155:196` until the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed.
+The current x402 Python SDK provides a default USDC asset for `eip155:84532`. X Layer identity and Agent wallet verification remain X Layer-oriented, while the production payment gate currently uses the verified x402 network above.
 
 ## Required Environment Variables
 
@@ -140,7 +140,7 @@ X402_SCHEME=exact
 DEMO_EVALUATE_ENABLED=0
 ```
 
-Never commit API keys.
+Keep API keys in environment variables only.
 
 ## Verification Commands
 
@@ -167,4 +167,4 @@ Expected result:
 - `accepts[0].network` is `eip155:84532`.
 - `extensions.bazaar.info.input.method` is `POST`.
 
-Paid replay must be tested from a supported Agent Client with an authenticated Agentic Wallet and sufficient supported stablecoin balance.
+Real-payment replay is performed from a supported Agent Client with an authenticated Agentic Wallet and sufficient supported stablecoin balance.

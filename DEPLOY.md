@@ -13,7 +13,7 @@ Integration:    https://agent-vc-4a3m.onrender.com/integration-check
 OpenAPI:        https://agent-vc-4a3m.onrender.com/openapi.json
 ```
 
-Use `/integration-check` before review or demo. It returns a no-secret status object confirming the paid endpoint, x402 status, report URL template, LLM status, and Agent Client response contract.
+Use `/integration-check` before review or live demonstration. It returns a no-secret status object confirming the paid endpoint, x402 status, report URL template, LLM status, and Agent Client response contract.
 
 ## Required Environment Variables
 
@@ -44,7 +44,7 @@ X402_SCHEME=exact
 X402_MAX_TIMEOUT_SECONDS=300
 ```
 
-Do not commit API keys. On Render, `LLM_API_KEY`, `DB_SYNC_WEBHOOK_URL`, and `DB_SYNC_SECRET` are marked `sync: false`.
+Keep API keys in environment variables only. On Render, `LLM_API_KEY`, `DB_SYNC_WEBHOOK_URL`, and `DB_SYNC_SECRET` are marked `sync: false`.
 
 ## Render Deployment
 
@@ -71,7 +71,7 @@ Current registration values:
 ```json
 {
   "serviceName": "Agent VC Investment Diagnosis",
-  "serviceDescription": "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n③ 网页端只用于产品介绍，不免费生成完整研报，不参与入库和 100 USDT 支持筛选。",
+  "serviceDescription": "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n③ 网页端用于产品介绍和项目信息整理；完整研报、入库和 100 USDT 支持筛选仅通过付费 Agent Client 端点完成。",
   "serviceType": "A2MCP",
   "fee": "5",
   "endpoint": "https://agent-vc-4a3m.onrender.com/evaluate"
@@ -112,14 +112,14 @@ It can:
 - Generate non-paid follow-up questions through `/interview`.
 - Show the project JSON that should be submitted through Agent Client.
 
-It cannot:
+Production boundaries:
 
-- Generate a free full investment report.
-- Enter the investment database.
-- Consume the 100 USDT support quota.
-- Bypass x402.
+- Complete investment reports are generated only through the paid Agent Client endpoint.
+- Investment database writes happen only after a valid paid `/evaluate` call.
+- 100 USDT support quota decisions happen only in the paid endpoint.
+- x402 remains the required payment gate for production report generation.
 
-`/demo/evaluate` stays disabled by default and returns 403.
+`/demo/evaluate` is restricted by default and returns 403.
 
 ## Network Note
 
@@ -129,9 +129,9 @@ Current working x402 payment network:
 X402_NETWORK=eip155:84532
 ```
 
-The installed x402 Python SDK provides a default USDC asset for `eip155:84532`. X Layer identity and optional Agent wallet verification remain X Layer-oriented (`eip155:196`), but payment should not be switched to `eip155:196` until the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed.
+The installed x402 Python SDK provides a default USDC asset for `eip155:84532`. X Layer identity and optional Agent wallet verification remain X Layer-oriented (`eip155:196`), while the production payment gate currently uses the verified x402 network above.
 
-Switching the payment network early can break HTTP 402 generation.
+Only change the payment network after the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed for that network.
 
 ## Local Verification
 
@@ -170,4 +170,4 @@ if raw:
 PY
 ```
 
-The final real-payment replay must be tested from a supported Agent Client with an authenticated Agentic Wallet and sufficient supported stablecoin balance.
+Real-payment replay is performed from a supported Agent Client with an authenticated Agentic Wallet and sufficient supported stablecoin balance.

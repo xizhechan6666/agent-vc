@@ -430,7 +430,7 @@ INDEX_HTML = """<!doctype html>
       <form id="projectForm">
         <p class="form-note">只需要先填 4 个核心信息。其他信息不是必填，但会提高报告准确度和验证加分。</p>
         <label>Agent 名称
-          <input name="name" value="Demo Alpha Agent" required>
+          <input name="name" value="NVC Assessment Agent" required>
         </label>
         <label>一句话介绍
           <textarea name="one_liner" required>帮助 OKX.AI Agent 创业者把产品包装成可成交的付费服务。</textarea>
@@ -448,7 +448,7 @@ INDEX_HTML = """<!doctype html>
           <input name="contact" value="">
         </label>
         <label>Agent 链接或 ID（可选加分项）
-          <input name="agent_url" value="https://www.okx.ai/zh-hans/agents/demo">
+          <input name="agent_url" value="https://www.okx.ai/zh-hans">
         </label>
         <label>已上线产品链接（可选加分项）
           <input name="product_url" value="">
@@ -731,7 +731,7 @@ INDEX_HTML = """<!doctype html>
         <div class="report-card">
           <div class="report-hero">
             <h3>完整投资评估报告需要通过 Agent Client 付费生成</h3>
-            <p>网页端只用于了解产品和整理项目信息，不免费生成完整研报、不写入投资数据库、不参与 100 USDT 支持筛选。</p>
+            <p>网页端用于了解产品和整理项目信息；完整研报、入库和 100 USDT 支持筛选仅通过付费 Agent Client 端点完成。</p>
             <div class="badge-row">
               <span class="badge">付费端点 POST /evaluate</span>
               <span class="badge">x402 支付 5 USDT</span>
@@ -1023,7 +1023,7 @@ def a2mcp_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
             "serviceDescription": (
                 "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n"
                 "② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n"
-                "③ 网页端只用于产品介绍，不免费生成完整研报，不参与入库和 100 USDT 支持筛选。"
+                "③ 网页端用于产品介绍和项目信息整理；完整研报、入库和 100 USDT 支持筛选仅通过付费 Agent Client 端点完成。"
             ),
             "serviceType": "A2MCP",
             "fee": os.getenv("SERVICE_FEE_USDT", "5"),
@@ -1512,7 +1512,7 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                 403,
                 {
                     "error": "paid_agent_required",
-                    "message": "网页端不提供免费完整研报；请通过 Agent client 付费调用 /evaluate。",
+                    "message": "完整研报、入库和 100 USDT 支持筛选仅通过 Agent Client 付费调用 /evaluate 完成。",
                 },
             )
             return

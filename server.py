@@ -291,5 +291,5 @@ async def evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
 @app.post("/demo/evaluate")
 async def demo_evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     if os.getenv("DEMO_EVALUATE_ENABLED", "0") != "1":
-        raise HTTPException(status_code=403, detail="网页端不提供免费完整研报；请通过 Agent client 付费调用 /evaluate。")
+        raise HTTPException(status_code=403, detail="完整研报、入库和 100 USDT 支持筛选仅通过 Agent Client 付费调用 /evaluate 完成。")
     return run_evaluation(payload, request)
