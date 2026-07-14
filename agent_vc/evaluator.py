@@ -138,7 +138,7 @@ def normalize_report(report: dict[str, Any], project: dict[str, Any]) -> dict[st
     report.setdefault("data_used_as_supporting_evidence", [])
     report.setdefault("verification_evidence", verification_evidence(project))
     report.setdefault("reapply_conditions", [])
-    report.setdefault("contact_cta", default_contact_cta())
+    report["contact_cta"] = default_contact_cta()
     return report
 
 
