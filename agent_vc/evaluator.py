@@ -34,6 +34,16 @@ SCORE_LABELS = {
     "verification_bonus": "真实产品与链上验证加分",
 }
 
+AI_PHRASE_REPLACEMENTS = {
+    "不仅仅是": "",
+    "更是": "也包括",
+    "在当今快速发展的时代": "",
+    "赋能": "支持",
+    "生态闭环": "业务链路",
+    "降本增效": "降低成本或提高效率",
+    "具有巨大潜力": "仍需要证据证明市场空间",
+}
+
 
 def generate_interview(project: dict[str, Any]) -> dict[str, Any]:
     payload = {
@@ -138,8 +148,11 @@ def normalize_report(report: dict[str, Any], project: dict[str, Any]) -> dict[st
     report.setdefault("data_used_as_supporting_evidence", [])
     report.setdefault("verification_evidence", verification_evidence(project))
     report.setdefault("reapply_conditions", [])
+    report["memo_sections"] = normalize_memo_sections(report.get("memo_sections"), report, project)
+    report["score_explanations"] = normalize_score_explanations(report.get("score_explanations"), normalized_scores)
+    report["evidence_table"] = normalize_evidence_table(report.get("evidence_table"), project)
     report["contact_cta"] = default_contact_cta()
-    return report
+    return scrub_report_language(report)
 
 
 def apply_investment_gate(report: dict[str, Any], conn: Any, *, duplicate: bool = False) -> dict[str, Any]:
@@ -222,6 +235,9 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
         "score_labels": SCORE_LABELS,
         "score_max": SCORE_KEYS,
         "investment_summary": "当前为本地启发式评估结果，因为未配置 LLM API 或 LLM 调用失败。它适合联调流程，不适合作为最终报告质量验收。",
+        "memo_sections": fallback_memo_sections(project),
+        "score_explanations": fallback_score_explanations(scores),
+        "evidence_table": fallback_evidence_table(project),
         "project_understanding": {
             "target_user": str(project.get("target_user", "")),
             "problem": str(project.get("problem", "")),
@@ -249,6 +265,130 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
         "contact_cta": default_contact_cta(),
         "missing_information": ["LLM_API_KEY", f"llm_error:{llm_error}"],
     }
+
+
+def normalize_memo_sections(value: Any, report: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
+    fallback = fallback_memo_sections(project)
+    if not isinstance(value, dict):
+        return fallback
+    normalized = fallback.copy()
+    for key in fallback:
+        current = value.get(key)
+        if isinstance(fallback[key], list):
+            normalized[key] = current if isinstance(current, list) and current else fallback[key]
+        else:
+            normalized[key] = str(current).strip() if current else fallback[key]
+    if report.get("investment_summary"):
+        normalized["investment_decision"] = str(value.get("investment_decision") or report["investment_summary"])
+    return normalized
+
+
+def normalize_score_explanations(value: Any, scores: dict[str, int]) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return fallback_score_explanations(scores)
+    result: dict[str, str] = {}
+    fallback = fallback_score_explanations(scores)
+    for key in SCORE_KEYS:
+        text = str(value.get(key) or "").strip()
+        result[key] = text or fallback[key]
+    return result
+
+
+def normalize_evidence_table(value: Any, project: dict[str, Any]) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return fallback_evidence_table(project)
+    rows: list[dict[str, str]] = []
+    for item in value[:12]:
+        if not isinstance(item, dict):
+            continue
+        row_type = str(item.get("type") or "inference")
+        if row_type not in {"submitted_fact", "inference", "missing_evidence"}:
+            row_type = "inference"
+        rows.append(
+            {
+                "type": row_type,
+                "item": str(item.get("item") or "").strip(),
+                "impact_on_decision": str(item.get("impact_on_decision") or "").strip(),
+            }
+        )
+    return rows or fallback_evidence_table(project)
+
+
+def fallback_memo_sections(project: dict[str, Any]) -> dict[str, Any]:
+    name = str(project.get("name") or "该项目")
+    target = str(project.get("target_user") or "未提供")
+    problem = str(project.get("problem") or "未提供")
+    solution = str(project.get("solution") or "未提供")
+    return {
+        "investment_decision": "当前材料不足以形成投资候选结论。项目需要先证明目标用户、付费理由和真实使用证据。",
+        "company_snapshot": f"{name} 的目标用户是：{target}。项目描述的问题是：{problem}。当前方案是：{solution}。",
+        "founder_market_insight": "材料里还没有看到足够具体的用户访谈、付费行为或替代方案分析，因此无法判断创始人是否抓住了真实需求。",
+        "problem_quality": "问题描述需要进一步收敛到一个明确场景：谁在什么频率下遇到这个问题，现有替代方案为什么不够好，用户愿意为哪种结果付费。",
+        "product_readiness_review": "产品成熟度需要通过可访问链接、样例输出、稳定性记录或真实用户反馈来证明。没有这些证据时，项目更接近早期想法。",
+        "distribution_analysis": "当前分发路径仍需补充。项目方应说明第一批用户从哪里来、为什么会尝试、什么结果会促使他们转发。",
+        "business_model_review": "定价需要和具体结果绑定。用户是否会复购，取决于 Agent 能否持续交付比人工或通用模型更确定的结果。",
+        "defensibility_review": "现阶段不应过早强调壁垒。更重要的是证明项目能沉淀专有数据、固定工作流或高信任社区关系。",
+        "evidence_review": "已提交材料可以支持初步理解，但还不足以支持投资候选。缺失证据包括真实用户、收入、留存、链上或产品使用记录。",
+        "what_would_change_our_mind": [
+            "提供 3-5 个真实用户案例，说明用户为什么使用、是否愿意付费、是否会复购。",
+            "提供可访问产品链接、Agent 链接或钱包地址，用于验证项目已经上线。",
+            "补充一条明确的分发路径，包括首批用户来源和转化动作。",
+        ],
+        "next_7_days_execution_plan": [
+            "把项目定位收敛成一个具体付费场景，并删除无法验证的大愿景表述。",
+            "找 5 个目标用户完成一次真实测试，记录输入、输出、反馈和是否愿意付费。",
+            "补齐产品链接、钱包地址、社群入口或链上证据，让验证加分项可以成立。",
+        ],
+    }
+
+
+def fallback_score_explanations(scores: dict[str, int]) -> dict[str, str]:
+    return {
+        key: f"{SCORE_LABELS[key]}当前得分为 {scores.get(key, 0)}/{max_score}。该分数基于项目方提交的信息和可验证证据，缺失材料会压低该项判断。"
+        for key, max_score in SCORE_KEYS.items()
+    }
+
+
+def fallback_evidence_table(project: dict[str, Any]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for key, label in (
+        ("name", "项目名称"),
+        ("product_url", "产品链接"),
+        ("agent_url", "Agent 链接"),
+        ("wallet_address", "钱包地址"),
+        ("traction", "现有数据或用户证据"),
+    ):
+        value = str(project.get(key) or "").strip()
+        if value:
+            rows.append(
+                {
+                    "type": "submitted_fact",
+                    "item": f"{label}: {value}",
+                    "impact_on_decision": "可作为初步判断依据，但仍需结合产品质量和用户反馈复核。",
+                }
+            )
+    rows.append(
+        {
+            "type": "missing_evidence",
+            "item": "留存、复购、真实付费用户或连续使用记录",
+            "impact_on_decision": "缺少这些证据时，不应轻易进入投资候选。",
+        }
+    )
+    return rows
+
+
+def scrub_report_language(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: scrub_report_language(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [scrub_report_language(item) for item in value]
+    if isinstance(value, str):
+        cleaned = value
+        for old, new in AI_PHRASE_REPLACEMENTS.items():
+            cleaned = cleaned.replace(old, new)
+        cleaned = re.sub(r"这不是.{0,40}而是", "更准确地说，", cleaned)
+        return cleaned.strip()
+    return value
 
 
 def _default_verdict(total: int) -> str:

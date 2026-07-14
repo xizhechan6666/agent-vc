@@ -867,6 +867,37 @@ def items_html(items: Any) -> str:
     return "<ul>" + "".join(f"<li>{h(item)}</li>" for item in items) + "</ul>"
 
 
+def evidence_table_html(items: Any) -> str:
+    if not isinstance(items, list) or not items:
+        return '<p class="muted">暂无</p>'
+    labels = {
+        "submitted_fact": "已提交事实",
+        "inference": "投资人推断",
+        "missing_evidence": "缺失证据",
+    }
+    rows = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        row_type = str(item.get("type") or "inference")
+        rows.append(
+            "<tr>"
+            f"<td>{h(labels.get(row_type, row_type))}</td>"
+            f"<td>{h(item.get('item', ''))}</td>"
+            f"<td>{h(item.get('impact_on_decision', ''))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return '<p class="muted">暂无</p>'
+    return (
+        "<div class='table-wrap'><table><thead><tr>"
+        "<th>类型</th><th>内容</th><th>对判断的影响</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
+    )
+
+
 def report_page(evaluation: dict[str, Any]) -> str:
     report = evaluation["report"]
     scores = report.get("scores", {})
@@ -874,6 +905,10 @@ def report_page(evaluation: dict[str, Any]) -> str:
     discussion = report.get("committee_discussion", {})
     understanding = report.get("project_understanding", {})
     plan = report.get("improvement_plan", {})
+    memo = report.get("memo_sections") if isinstance(report.get("memo_sections"), dict) else {}
+    score_explanations = (
+        report.get("score_explanations") if isinstance(report.get("score_explanations"), dict) else {}
+    )
     final_candidate = bool(gate.get("final_candidate") or evaluation["final_candidate"])
     headline = gate.get("headline") or (
         "恭喜，你的项目已通过本轮评估，并获得 NVC 提供的 100 USDT 早期投资支持。"
@@ -892,7 +927,8 @@ def report_page(evaluation: dict[str, Any]) -> str:
             pct = 0
         score_rows += (
             f"<div class='score'><div><span>{h(label)}</span><em>{h(value)}/{h(max_score)}</em></div>"
-            f"<div class='bar'><span style='width:{pct}%'></span></div></div>"
+            f"<div class='bar'><span style='width:{pct}%'></span></div>"
+            f"<p>{h(score_explanations.get(key, ''))}</p></div>"
         )
     result_class = "selected" if final_candidate else "not-selected"
     return f"""<!doctype html>
@@ -920,9 +956,18 @@ def report_page(evaluation: dict[str, Any]) -> str:
     .score {{ border: 1px solid #d7dce2; border-radius: 6px; padding: 10px 11px; background: #fbfcfd; }}
     .score div:first-child {{ display: flex; justify-content: space-between; gap: 12px; }}
     .score em {{ color: #657184; font-style: normal; font-weight: 650; }}
+    .score p {{ margin: 8px 0 0; color: #657184; font-size: 13px; }}
     .bar {{ height: 7px; border-radius: 999px; background: #e7ebef; overflow: hidden; margin-top: 8px; }}
     .bar span {{ display: block; height: 100%; background: #0f766e; }}
     .muted {{ color: #657184; }}
+    .memo-grid {{ display: grid; grid-template-columns: 1fr; gap: 14px; }}
+    .memo-block {{ border: 1px solid #d7dce2; border-radius: 6px; padding: 14px; background: #fbfcfd; }}
+    .memo-block h3 {{ margin: 0 0 8px; font-size: 15px; }}
+    .table-wrap {{ overflow-x: auto; border: 1px solid #d7dce2; border-radius: 6px; }}
+    table {{ width: 100%; border-collapse: collapse; min-width: 680px; }}
+    th, td {{ border-bottom: 1px solid #d7dce2; padding: 9px 10px; text-align: left; vertical-align: top; }}
+    th {{ background: #fbfcfd; font-size: 13px; }}
+    tr:last-child td {{ border-bottom: 0; }}
     ul {{ margin: 0; padding-left: 20px; }}
     li {{ margin: 5px 0; }}
     @media print {{ body {{ background: #fff; }} main {{ padding: 0; }} .paper {{ border: 0; }} }}
@@ -958,6 +1003,51 @@ def report_page(evaluation: dict[str, Any]) -> str:
         <p>{h(report.get("investment_summary", ""))}</p>
       </section>
       <section>
+        <h2>投资 Memo</h2>
+        <div class="memo-grid">
+          <div class="memo-block">
+            <h3>投资结论</h3>
+            <p>{h(memo.get("investment_decision", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>公司快照</h3>
+            <p>{h(memo.get("company_snapshot", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>创始人与市场洞察</h3>
+            <p>{h(memo.get("founder_market_insight", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>问题质量</h3>
+            <p>{h(memo.get("problem_quality", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>产品成熟度</h3>
+            <p>{h(memo.get("product_readiness_review", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>分发与增长</h3>
+            <p>{h(memo.get("distribution_analysis", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>商业模式</h3>
+            <p>{h(memo.get("business_model_review", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>防御性</h3>
+            <p>{h(memo.get("defensibility_review", ""))}</p>
+          </div>
+          <div class="memo-block">
+            <h3>证据审查</h3>
+            <p>{h(memo.get("evidence_review", ""))}</p>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2>事实、推断与缺失证据</h2>
+        {evidence_table_html(report.get("evidence_table"))}
+      </section>
+      <section>
         <h2>项目理解</h2>
         <p><strong>目标用户：</strong>{h(understanding.get("target_user", ""))}</p>
         <p><strong>问题：</strong>{h(understanding.get("problem", ""))}</p>
@@ -989,6 +1079,10 @@ def report_page(evaluation: dict[str, Any]) -> str:
       </section>
       <section>
         <h2>改进计划</h2>
+        <p><strong>改变投资判断需要看到</strong></p>
+        {items_html(memo.get("what_would_change_our_mind"))}
+        <p><strong>7 天执行计划</strong></p>
+        {items_html(memo.get("next_7_days_execution_plan"))}
         <p><strong>48 小时</strong></p>
         {items_html(plan.get("next_48_hours"))}
         <p><strong>7 天</strong></p>

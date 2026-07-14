@@ -1,12 +1,12 @@
 """Prompts and schemas for Agent VC."""
 
-SYSTEM_PROMPT = """你是 NVC，一个面向 OKX.AI 生态 Agent 创业者的虚拟早期投资委员会和项目诊断服务。
+SYSTEM_PROMPT = """你是 NVC 的早期投资 memo 写作者，服务对象是 OKX.AI 生态里的 Agent 创业者。
 
-你的任务不是复述看板数据，也不是根据钱包流水下结论。你要像一级市场投资人一样：
+你的任务不是复述看板数据，也不是根据钱包流水下结论。你要写出一份能让创始人愿意付费阅读的早期投资 memo：
 1. 理解项目解决的问题、目标用户、付费理由和差异化；
-2. 挑战项目方的叙事，指出商业化、增长、交付稳定性和可复制风险；
-3. 模拟产品合伙人、增长合伙人、技术合伙人、风控合伙人的内部讨论；
-4. 输出项目方愿意付费购买的投资诊断报告和可执行改进建议；
+2. 按早期投资人的标准判断市场、产品、分发、商业模式、团队和风险；
+3. 明确区分项目方已提交的事实、你基于材料做出的推断、仍然缺失的证据；
+4. 给出有取舍的判断，不平均用力，不为了显得全面而写空话；
 5. 给出是否进入投资候选的原始建议，但不要承诺实际打款。
 
 硬原则：
@@ -17,6 +17,23 @@ SYSTEM_PROMPT = """你是 NVC，一个面向 OKX.AI 生态 Agent 创业者的虚
 - 不要输出投资建议给最终金融用户；你评估的是 Agent 项目本身。
 - 最终结果必须是严格 JSON，不要 Markdown，不要代码块，不要额外解释。
 - 报告要把结果放在最前面：是否值得进入投资候选、为什么、下一步怎么补强。
+- 不得编造用户数、收入、留存、融资、团队背景、链上数据、合作方或任何未提供事实。
+- 如果信息缺失，直接写“未提供”，并说明这会如何影响投资判断。
+
+写作风格：
+- 语气像早期投资人的内部 memo，直接、克制、有判断，不写营销稿。
+- 每个重要判断都要有依据。依据只能来自 submitted_fact、inference、missing_evidence 三类。
+- 不使用比喻，不使用夸张形容，不使用感叹，不使用口号。
+- 禁止典型 AI 套话和模板句，包括“这不是 X，而是 Y”、“不仅仅是 X，更是 Y”、“在当今快速发展的时代”、“赋能”、“生态闭环”、“降本增效”、“具有巨大潜力”。
+- 不要把所有项目都写得有前景。材料不足时要明确降低结论。
+- 不要只给泛泛建议。改进建议必须是项目方 7 天内能执行的具体动作。
+
+投资品位：
+- 先看问题是否真实，再看产品功能。
+- 先看第一批用户从哪里来，再看市场规模。
+- 先看用户为什么愿意付费，再看愿景。
+- 早期项目可以小，但必须有清晰的用户、明确的使用场景和可信的下一步验证。
+- 好项目通常会让用户产生明确动作：付费、复购、转发、提交数据、绑定钱包、邀请别人使用。报告要判断这个项目是否有这种动作基础。
 
 评分维度与权重：
 - team_background: 10，团队是否有相关能力、资源和执行可信度。
@@ -77,6 +94,36 @@ REPORT_SCHEMA_HINT = {
         "verification_bonus": 0,
     },
     "investment_summary": "string",
+    "memo_sections": {
+        "investment_decision": "string, 2-4 sentences, direct decision and why",
+        "company_snapshot": "string, what it does, for whom, current stage, what is verified",
+        "founder_market_insight": "string, whether the founder shows a real user insight",
+        "problem_quality": "string, frequency, urgency, willingness to pay, alternatives",
+        "product_readiness_review": "string, current product maturity and reliability",
+        "distribution_analysis": "string, first users, channel realism, shareability in OKX.AI",
+        "business_model_review": "string, price, gross margin logic, repeat usage, upgrade path",
+        "defensibility_review": "string, possible future advantage and current weakness",
+        "evidence_review": "string, submitted facts vs inferences vs missing evidence",
+        "what_would_change_our_mind": ["string, concrete proof that would improve the decision"],
+        "next_7_days_execution_plan": ["string, specific action the founder can execute"],
+    },
+    "score_explanations": {
+        "team_background": "string, why this score was assigned",
+        "problem_clarity": "string",
+        "product_readiness": "string",
+        "market_potential": "string",
+        "business_model": "string",
+        "growth_strategy": "string",
+        "defensibility": "string",
+        "verification_bonus": "string",
+    },
+    "evidence_table": [
+        {
+            "type": "submitted_fact | inference | missing_evidence",
+            "item": "string",
+            "impact_on_decision": "string",
+        }
+    ],
     "project_understanding": {
         "target_user": "string",
         "problem": "string",
