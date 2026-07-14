@@ -19,6 +19,8 @@ SYSTEM_PROMPT = """你是 NVC 的早期投资 memo 写作者，服务对象是 O
 - 报告要把结果放在最前面：是否值得进入投资候选、为什么、下一步怎么补强。
 - 不得编造用户数、收入、留存、融资、团队背景、链上数据、合作方或任何未提供事实。
 - 如果信息缺失，直接写“未提供”，并说明这会如何影响投资判断。
+- 不要把报告做成尽调问卷。用户可能只提交很少信息，你仍需基于有限材料输出完整 memo，同时明确置信度和缺失证据。
+- 不要因为某个字段没填就要求用户补齐所有字段。只指出最影响判断的 3-5 个缺口。
 
 写作风格：
 - 语气像早期投资人的内部 memo，直接、克制、有判断，不写营销稿。
@@ -53,7 +55,7 @@ SYSTEM_PROMPT = """你是 NVC 的早期投资 memo 写作者，服务对象是 O
 """
 
 
-INTERVIEW_PROMPT = """你是 Agent VC 的投资合伙人。请基于项目方提交的信息，生成 6 个高质量追问。
+INTERVIEW_PROMPT = """你是 Agent VC 的投资合伙人。请基于项目方提交的信息，生成 3 个高质量追问。
 
 问题必须帮助判断：
 1. 用户为什么会付费，而不是自己用通用模型完成；
@@ -62,6 +64,12 @@ INTERVIEW_PROMPT = """你是 Agent VC 的投资合伙人。请基于项目方提
 4. 增长路径；
 5. 差异化和壁垒；
 6. 当前最危险的商业化假设。
+
+交互原则：
+- 只问最影响投资判断的 3 个问题。
+- 不要把缺失字段逐项问一遍。
+- 不问用户短期难以回答、且不会显著改变判断的问题。
+- 问题要让用户用一两句话就能回答。
 
 只输出严格 JSON：
 {
@@ -83,6 +91,8 @@ REPORT_SCHEMA_HINT = {
     "recommendation": "invest_candidate | watch | pass",
     "raw_eligible_for_investment": False,
     "total_score": 0,
+    "confidence_level": "high | medium | low",
+    "confidence_notes": ["string, what is reliable and what is uncertain"],
     "scores": {
         "team_background": 0,
         "problem_clarity": 0,
@@ -116,6 +126,16 @@ REPORT_SCHEMA_HINT = {
         "growth_strategy": "string",
         "defensibility": "string",
         "verification_bonus": "string",
+    },
+    "score_evidence_levels": {
+        "team_background": "high | medium | low",
+        "problem_clarity": "high | medium | low",
+        "product_readiness": "high | medium | low",
+        "market_potential": "high | medium | low",
+        "business_model": "high | medium | low",
+        "growth_strategy": "high | medium | low",
+        "defensibility": "high | medium | low",
+        "verification_bonus": "high | medium | low",
     },
     "evidence_table": [
         {

@@ -185,6 +185,24 @@ INDEX_HTML = """<!doctype html>
       font-size: 13px;
       font-weight: 600;
     }
+    details.optional-fields {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 10px 12px 2px;
+      margin-top: 12px;
+    }
+    details.optional-fields summary {
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .form-note {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 12px;
+    }
     input, textarea {
       width: 100%;
       margin-top: 6px;
@@ -409,9 +427,22 @@ INDEX_HTML = """<!doctype html>
         <span class="message">基础评分 80 + 验证加分 20</span>
       </div>
       <form id="projectForm">
+        <p class="form-note">只需要先填 4 个核心信息。其他信息不是必填，但会提高报告准确度和验证加分。</p>
         <label>Agent 名称
           <input name="name" value="Demo Alpha Agent" required>
         </label>
+        <label>一句话介绍
+          <textarea name="one_liner" required>帮助 OKX.AI Agent 创业者把产品包装成可成交的付费服务。</textarea>
+        </label>
+        <label>目标用户
+          <textarea name="target_user" required>已经有 Agent 原型、但不知道如何定价和获得首批用户的 OKX.AI ASP。</textarea>
+        </label>
+        <label>解决的问题
+          <textarea name="problem" required>很多 Agent 只是功能演示，缺少清晰付费场景、增长路径和投资叙事。</textarea>
+        </label>
+        <details class="optional-fields">
+          <summary>可选加分信息</summary>
+          <p class="form-note">可以跳过。填写产品、钱包、用户证据和差异化，会让报告更准确，也会影响验证加分。</p>
         <label>联系方式（入选后用于核验，可填邮箱/Telegram）
           <input name="contact" value="">
         </label>
@@ -429,15 +460,6 @@ INDEX_HTML = """<!doctype html>
         </label>
         <label>钱包地址（可选加分项）
           <input name="wallet_address" value="">
-        </label>
-        <label>一句话介绍
-          <textarea name="one_liner">帮助 OKX.AI Agent 创业者把产品包装成可成交的付费服务。</textarea>
-        </label>
-        <label>目标用户
-          <textarea name="target_user">已经有 Agent 原型、但不知道如何定价和获得首批用户的 OKX.AI ASP。</textarea>
-        </label>
-        <label>解决的问题
-          <textarea name="problem">很多 Agent 只是功能演示，缺少清晰付费场景、增长路径和投资叙事。</textarea>
         </label>
         <label>解决方案
           <textarea name="solution">通过项目问答、VC rubric 和投资委员会模拟，输出结构化诊断报告。</textarea>
@@ -460,6 +482,7 @@ INDEX_HTML = """<!doctype html>
         <label>已知风险
           <textarea name="risks">报告质量依赖 prompt 和模型；投资候选需要严格控制比例。</textarea>
         </label>
+        </details>
         <div class="actions">
           <button type="button" id="interviewBtn">生成追问</button>
           <button type="button" id="evaluateBtn">生成报告</button>
@@ -898,6 +921,10 @@ def evidence_table_html(items: Any) -> str:
     )
 
 
+def confidence_label(value: Any) -> str:
+    return {"high": "高", "medium": "中", "low": "低"}.get(str(value), "中")
+
+
 def report_page(evaluation: dict[str, Any]) -> str:
     report = evaluation["report"]
     scores = report.get("scores", {})
@@ -908,6 +935,9 @@ def report_page(evaluation: dict[str, Any]) -> str:
     memo = report.get("memo_sections") if isinstance(report.get("memo_sections"), dict) else {}
     score_explanations = (
         report.get("score_explanations") if isinstance(report.get("score_explanations"), dict) else {}
+    )
+    score_evidence_levels = (
+        report.get("score_evidence_levels") if isinstance(report.get("score_evidence_levels"), dict) else {}
     )
     final_candidate = bool(gate.get("final_candidate") or evaluation["final_candidate"])
     headline = gate.get("headline") or (
@@ -928,6 +958,7 @@ def report_page(evaluation: dict[str, Any]) -> str:
         score_rows += (
             f"<div class='score'><div><span>{h(label)}</span><em>{h(value)}/{h(max_score)}</em></div>"
             f"<div class='bar'><span style='width:{pct}%'></span></div>"
+            f"<p><strong>证据置信度：{h(confidence_label(score_evidence_levels.get(key, 'medium')))}</strong></p>"
             f"<p>{h(score_explanations.get(key, ''))}</p></div>"
         )
     result_class = "selected" if final_candidate else "not-selected"
@@ -983,6 +1014,7 @@ def report_page(evaluation: dict[str, Any]) -> str:
         <div class="badges">
           <span class="badge">投资支持 {h(gate.get("award_amount_usdt", 0))} USDT</span>
           <span class="badge">总分 {h(report.get("total_score", 0))}/100</span>
+          <span class="badge">判断置信度 {h(confidence_label(report.get("confidence_level", "medium")))}</span>
           <span class="badge">测评费 {h(gate.get("assessment_fee_usdt", os.getenv("SERVICE_FEE_USDT", "5")))} USDT</span>
           <span class="badge">报告 #{h(evaluation["id"])}</span>
         </div>
@@ -1046,6 +1078,11 @@ def report_page(evaluation: dict[str, Any]) -> str:
       <section>
         <h2>事实、推断与缺失证据</h2>
         {evidence_table_html(report.get("evidence_table"))}
+      </section>
+      <section>
+        <h2>判断置信度</h2>
+        <p><strong>整体置信度：</strong>{h(confidence_label(report.get("confidence_level", "medium")))}</p>
+        {items_html(report.get("confidence_notes"))}
       </section>
       <section>
         <h2>项目理解</h2>

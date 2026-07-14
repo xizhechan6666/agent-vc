@@ -49,7 +49,7 @@ def generate_interview(project: dict[str, Any]) -> dict[str, Any]:
     payload = {
         "task": "generate_investor_questions",
         "project": project,
-        "required_question_count": 6,
+        "required_question_count": 3,
     }
     try:
         result = llm.call_json(INTERVIEW_PROMPT, payload)
@@ -72,23 +72,8 @@ def generate_interview(project: dict[str, Any]) -> dict[str, Any]:
             },
             {
                 "id": "q3",
-                "question": "你的定价依据是什么？用户在什么情况下会复购？",
-                "why_it_matters": "单次好奇调用不是可投资的商业模式。",
-            },
-            {
-                "id": "q4",
                 "question": "你现在最可信的 traction 是什么？如果没有数据，最接近真实需求的证据是什么？",
                 "why_it_matters": "数据可以少，但证据链不能完全空白。",
-            },
-            {
-                "id": "q5",
-                "question": "这个 Agent 的能力里，哪一部分最难被后来者复制？",
-                "why_it_matters": "没有壁垒的 Agent 很难获得投资判断上的高分。",
-            },
-            {
-                "id": "q6",
-                "question": "如果只允许你在 48 小时内改一个东西来提高成交率，你会改什么？",
-                "why_it_matters": "能否抓住关键瓶颈，反映创始人的产品判断。",
             },
         ]
     }
@@ -150,7 +135,10 @@ def normalize_report(report: dict[str, Any], project: dict[str, Any]) -> dict[st
     report.setdefault("reapply_conditions", [])
     report["memo_sections"] = normalize_memo_sections(report.get("memo_sections"), report, project)
     report["score_explanations"] = normalize_score_explanations(report.get("score_explanations"), normalized_scores)
+    report["score_evidence_levels"] = normalize_score_evidence_levels(report.get("score_evidence_levels"), project)
     report["evidence_table"] = normalize_evidence_table(report.get("evidence_table"), project)
+    report["confidence_level"] = normalize_confidence_level(report.get("confidence_level"), project)
+    report["confidence_notes"] = normalize_confidence_notes(report.get("confidence_notes"), project)
     report["contact_cta"] = default_contact_cta()
     return scrub_report_language(report)
 
@@ -237,7 +225,10 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
         "investment_summary": "当前为本地启发式评估结果，因为未配置 LLM API 或 LLM 调用失败。它适合联调流程，不适合作为最终报告质量验收。",
         "memo_sections": fallback_memo_sections(project),
         "score_explanations": fallback_score_explanations(scores),
+        "score_evidence_levels": fallback_score_evidence_levels(project),
         "evidence_table": fallback_evidence_table(project),
+        "confidence_level": normalize_confidence_level(None, project),
+        "confidence_notes": normalize_confidence_notes(None, project),
         "project_understanding": {
             "target_user": str(project.get("target_user", "")),
             "problem": str(project.get("problem", "")),
@@ -294,6 +285,17 @@ def normalize_score_explanations(value: Any, scores: dict[str, int]) -> dict[str
     return result
 
 
+def normalize_score_evidence_levels(value: Any, project: dict[str, Any]) -> dict[str, str]:
+    fallback = fallback_score_evidence_levels(project)
+    if not isinstance(value, dict):
+        return fallback
+    result: dict[str, str] = {}
+    for key in SCORE_KEYS:
+        level = str(value.get(key) or fallback[key]).lower()
+        result[key] = level if level in {"high", "medium", "low"} else fallback[key]
+    return result
+
+
 def normalize_evidence_table(value: Any, project: dict[str, Any]) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return fallback_evidence_table(project)
@@ -312,6 +314,42 @@ def normalize_evidence_table(value: Any, project: dict[str, Any]) -> list[dict[s
             }
         )
     return rows or fallback_evidence_table(project)
+
+
+def normalize_confidence_level(value: Any, project: dict[str, Any]) -> str:
+    text = str(value or "").lower()
+    if text in {"high", "medium", "low"}:
+        return text
+    required = ["name", "one_liner", "target_user", "problem"]
+    optional_signal = ["product_url", "agent_url", "wallet_address", "traction", "pricing", "differentiation"]
+    required_count = sum(1 for key in required if str(project.get(key) or "").strip())
+    signal_count = sum(1 for key in optional_signal if str(project.get(key) or "").strip())
+    if required_count >= 4 and signal_count >= 3:
+        return "high"
+    if required_count >= 3:
+        return "medium"
+    return "low"
+
+
+def normalize_confidence_notes(value: Any, project: dict[str, Any]) -> list[str]:
+    if isinstance(value, list) and value:
+        return [str(item) for item in value[:6] if str(item).strip()]
+    notes = []
+    if project.get("one_liner") and project.get("target_user") and project.get("problem"):
+        notes.append("核心定位、目标用户和问题描述已提供，可以形成基础判断。")
+    else:
+        notes.append("核心定位信息不完整，报告会更多依赖推断。")
+    if project.get("product_url") or project.get("agent_url"):
+        notes.append("已提供产品或 Agent 链接，产品成熟度判断的置信度更高。")
+    else:
+        notes.append("未提供产品或 Agent 链接，产品成熟度只能低置信判断。")
+    if project.get("traction") or project.get("wallet_address") or project.get("onchain_evidence"):
+        notes.append("已提供部分验证证据，可用于验证加分。")
+    else:
+        notes.append("未提供 traction、钱包或链上证据，验证加分和投资候选判断会更保守。")
+    if not project.get("pricing"):
+        notes.append("未提供定价，商业模式判断以问题强度和使用场景为主。")
+    return notes
 
 
 def fallback_memo_sections(project: dict[str, Any]) -> dict[str, Any]:
@@ -346,6 +384,19 @@ def fallback_score_explanations(scores: dict[str, int]) -> dict[str, str]:
     return {
         key: f"{SCORE_LABELS[key]}当前得分为 {scores.get(key, 0)}/{max_score}。该分数基于项目方提交的信息和可验证证据，缺失材料会压低该项判断。"
         for key, max_score in SCORE_KEYS.items()
+    }
+
+
+def fallback_score_evidence_levels(project: dict[str, Any]) -> dict[str, str]:
+    return {
+        "team_background": "medium" if project.get("founder_pitch") else "low",
+        "problem_clarity": "high" if project.get("problem") and project.get("target_user") else "medium",
+        "product_readiness": "high" if project.get("product_url") or project.get("agent_url") else "low",
+        "market_potential": "medium" if project.get("target_user") else "low",
+        "business_model": "medium" if project.get("pricing") else "low",
+        "growth_strategy": "medium" if project.get("social") or project.get("traction") else "low",
+        "defensibility": "medium" if project.get("differentiation") else "low",
+        "verification_bonus": "high" if project.get("wallet_address") or project.get("onchain_evidence") else "low",
     }
 
 
