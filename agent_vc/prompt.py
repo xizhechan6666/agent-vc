@@ -104,6 +104,16 @@ REPORT_SCHEMA_HINT = {
         "verification_bonus": 0,
     },
     "investment_summary": "string",
+    "client_summary": {
+        "headline": "string",
+        "short_verdict": "string",
+        "score_line": "string",
+        "award_line": "string",
+        "primary_gap": "string",
+        "next_action": "string",
+        "report_url": "string",
+        "contact": "string",
+    },
     "memo_sections": {
         "investment_decision": "string, 2-4 sentences, direct decision and why",
         "company_snapshot": "string, what it does, for whom, current stage, what is verified",

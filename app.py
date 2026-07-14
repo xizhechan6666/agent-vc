@@ -19,6 +19,7 @@ from agent_vc.evaluator import (
     SCORE_KEYS,
     SCORE_LABELS,
     apply_investment_gate,
+    build_client_summary,
     evaluate_project,
     generate_interview,
     project_fingerprint,
@@ -940,6 +941,7 @@ def report_page(evaluation: dict[str, Any]) -> str:
         report.get("score_evidence_levels") if isinstance(report.get("score_evidence_levels"), dict) else {}
     )
     final_candidate = bool(gate.get("final_candidate") or evaluation["final_candidate"])
+    client_summary = report.get("client_summary") if isinstance(report.get("client_summary"), dict) else {}
     headline = gate.get("headline") or (
         "恭喜，你的项目已通过本轮评估，并获得 NVC 提供的 100 USDT 早期投资支持。"
         if final_candidate
@@ -1019,6 +1021,12 @@ def report_page(evaluation: dict[str, Any]) -> str:
           <span class="badge">报告 #{h(evaluation["id"])}</span>
         </div>
         <p class="muted" style="margin-top:14px;">{h(gate.get("contact") or report.get("contact_cta", ""))}</p>
+        <div class="memo-block" style="margin-top:14px;">
+          <h3>Agent 摘要</h3>
+          <p>{h(client_summary.get("short_verdict", report.get("one_line_verdict", "")))}</p>
+          <p><strong>{h(client_summary.get("score_line", ""))}</strong></p>
+          <p>{h(client_summary.get("primary_gap", ""))}</p>
+        </div>
         {items_html(next_steps)}
       </section>
       <div class="hero">
@@ -1284,6 +1292,8 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                 paid_report_url = f"{base_url(self)}/agent/reports/{report_token}"
                 report["paid_report_url"] = paid_report_url
                 report["award_result"] = gate
+                client_summary = build_client_summary(report, gate, paid_report_url)
+                report["client_summary"] = client_summary
                 request_id = save_evaluation(
                     conn,
                     project_name=str(report.get("project_name") or project.get("name") or "Unnamed Agent"),
@@ -1305,6 +1315,7 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                     "duplicate_today": duplicate,
                     "contact_hint": contact_hint,
                     "investment_gate": gate,
+                    "client_summary": client_summary,
                     "report": report,
                 }
             )
@@ -1317,6 +1328,7 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                     "report_url": f"{base_url(self)}/agent/reports/{report_token}",
                     "legacy_report_url": f"{base_url(self)}/reports/{request_id}",
                     "investment_gate": gate,
+                    "client_summary": client_summary,
                     "sync": sync_status,
                     "report": report,
                 },

@@ -189,6 +189,32 @@ def apply_investment_gate(report: dict[str, Any], conn: Any, *, duplicate: bool 
     }
 
 
+def build_client_summary(report: dict[str, Any], gate: dict[str, Any], report_url: str) -> dict[str, Any]:
+    memo = report.get("memo_sections") if isinstance(report.get("memo_sections"), dict) else {}
+    evidence_rows = report.get("evidence_table") if isinstance(report.get("evidence_table"), list) else []
+    missing_items = [
+        str(row.get("item", ""))
+        for row in evidence_rows
+        if isinstance(row, dict) and row.get("type") == "missing_evidence"
+    ]
+    primary_gap = missing_items[0] if missing_items else _first_list_item(report.get("risks"), "仍需补充真实用户、产品和复购证据。")
+    score = int(report.get("total_score", 0))
+    confidence = str(report.get("confidence_level") or "medium")
+    short_verdict = str(memo.get("investment_decision") or report.get("one_line_verdict") or gate.get("reason") or "")
+    if len(short_verdict) > 180:
+        short_verdict = short_verdict[:177].rstrip() + "..."
+    return {
+        "headline": str(gate.get("headline") or report.get("one_line_verdict") or ""),
+        "short_verdict": short_verdict,
+        "score_line": f"总分 {score}/100，判断置信度：{confidence_label(confidence)}。",
+        "award_line": f"投资支持 {int(gate.get('award_amount_usdt', 0))} USDT；推广支持最高 {int(gate.get('promotion_support_usdt', 0))} USDT。",
+        "primary_gap": primary_gap,
+        "next_action": "打开完整报告链接，查看评分卡、证据审查和 7 天执行计划。",
+        "report_url": report_url,
+        "contact": default_contact_cta(),
+    }
+
+
 def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm_error: str) -> dict[str, Any]:
     text = " ".join(str(v) for v in project.values() if v)
     text += " " + " ".join(str(item.get("answer", "")) for item in answers if isinstance(item, dict))
@@ -256,6 +282,16 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
         "contact_cta": default_contact_cta(),
         "missing_information": ["LLM_API_KEY", f"llm_error:{llm_error}"],
     }
+
+
+def _first_list_item(value: Any, fallback: str) -> str:
+    if isinstance(value, list) and value:
+        return str(value[0])
+    return fallback
+
+
+def confidence_label(value: str) -> str:
+    return {"high": "高", "medium": "中", "low": "低"}.get(str(value), "中")
 
 
 def normalize_memo_sections(value: Any, report: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:

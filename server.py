@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from agent_vc.evaluator import (
     apply_investment_gate,
+    build_client_summary,
     evaluate_project,
     generate_interview,
     project_fingerprint,
@@ -197,6 +198,8 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         paid_report_url = absolute_url(request, f"/agent/reports/{report_token}")
         report["paid_report_url"] = paid_report_url
         report["award_result"] = gate
+        client_summary = build_client_summary(report, gate, paid_report_url)
+        report["client_summary"] = client_summary
         request_id = save_evaluation(
             conn,
             project_name=str(report.get("project_name") or project.get("name") or "Unnamed Agent"),
@@ -218,6 +221,7 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
             "duplicate_today": duplicate,
             "contact_hint": contact_hint,
             "investment_gate": gate,
+            "client_summary": client_summary,
             "report": report,
         }
     )
@@ -228,6 +232,7 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         "report_url": absolute_url(request, f"/agent/reports/{report_token}"),
         "legacy_report_url": absolute_url(request, f"/reports/{request_id}"),
         "investment_gate": gate,
+        "client_summary": client_summary,
         "sync": sync_status,
         "report": report,
     }
