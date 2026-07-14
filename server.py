@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -16,7 +17,7 @@ from agent_vc.evaluator import (
     submitter_key,
 )
 from agent_vc.prompt import INPUT_SCHEMA, REPORT_SCHEMA_HINT
-from agent_vc.store import connect, duplicate_today, get_evaluation, save_evaluation
+from agent_vc.store import connect, duplicate_today, get_evaluation, get_evaluation_by_token, save_evaluation
 from agent_vc.sync import sync_evaluation
 from app import INDEX_HTML, a2mcp_document, openapi_document, report_page
 
@@ -168,6 +169,15 @@ async def report(report_id: int) -> str:
     return report_page(evaluation)
 
 
+@app.get("/agent/reports/{report_token}", response_class=HTMLResponse)
+async def agent_report(report_token: str) -> str:
+    with connect() as conn:
+        evaluation = get_evaluation_by_token(conn, report_token)
+    if evaluation is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return report_page(evaluation)
+
+
 def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     project = payload.get("project")
     answers = payload.get("answers", [])
@@ -180,9 +190,12 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     fingerprint = project_fingerprint(project)
     user_key = submitter_key(project)
     contact_hint = str(project.get("contact") or project.get("email") or "")
+    report_token = secrets.token_urlsafe(18)
     with connect() as conn:
         duplicate = duplicate_today(conn, project_fingerprint=fingerprint, submitter_key=user_key)
         gate = apply_investment_gate(report, conn, duplicate=duplicate)
+        paid_report_url = absolute_url(request, f"/agent/reports/{report_token}")
+        report["paid_report_url"] = paid_report_url
         report["award_result"] = gate
         request_id = save_evaluation(
             conn,
@@ -193,10 +206,13 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
             submitter_key=user_key,
             duplicate=duplicate,
             contact_hint=contact_hint,
+            report_token=report_token,
         )
     sync_status = sync_evaluation(
         {
             "request_id": request_id,
+            "report_token": report_token,
+            "paid_report_url": absolute_url(request, f"/agent/reports/{report_token}"),
             "project_fingerprint": fingerprint,
             "submitter_key": user_key,
             "duplicate_today": duplicate,
@@ -208,7 +224,9 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
 
     return {
         "request_id": request_id,
-        "report_url": absolute_url(request, f"/reports/{request_id}"),
+        "report_token": report_token,
+        "report_url": absolute_url(request, f"/agent/reports/{report_token}"),
+        "legacy_report_url": absolute_url(request, f"/reports/{request_id}"),
         "investment_gate": gate,
         "sync": sync_status,
         "report": report,
@@ -230,6 +248,6 @@ async def evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
 
 @app.post("/demo/evaluate")
 async def demo_evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
-    if os.getenv("DEMO_EVALUATE_ENABLED", "1") != "1":
-        raise HTTPException(status_code=404, detail="Demo evaluation is disabled")
+    if os.getenv("DEMO_EVALUATE_ENABLED", "0") != "1":
+        raise HTTPException(status_code=403, detail="网页端不提供免费完整研报；请通过 Agent client 付费调用 /evaluate。")
     return run_evaluation(payload, request)

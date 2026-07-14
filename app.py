@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -24,7 +25,7 @@ from agent_vc.evaluator import (
     submitter_key,
 )
 from agent_vc.prompt import INPUT_SCHEMA, REPORT_SCHEMA_HINT
-from agent_vc.store import connect, duplicate_today, get_evaluation, save_evaluation
+from agent_vc.store import connect, duplicate_today, get_evaluation, get_evaluation_by_token, save_evaluation
 from agent_vc.sync import sync_evaluation
 
 
@@ -681,22 +682,36 @@ INDEX_HTML = """<!doctype html>
     });
 
     document.getElementById('evaluateBtn').addEventListener('click', async () => {
-      setBusy(true, '正在评估团队与市场…');
-      output.innerHTML = '<p class="message">正在评估团队、市场、产品成熟度和真实验证证据……</p>';
-      try {
-        runState.textContent = '正在生成完整投资评估报告…';
-        const body = await postJson('/demo/evaluate', {
-          project: projectFromForm(),
-          answers: answersFromForm()
-        });
-        output.innerHTML = renderReport(body);
-        runState.textContent = '报告已生成';
-      } catch (error) {
-        output.innerHTML = `<span class="error">${error.message}</span>`;
-        runState.textContent = 'error';
-      } finally {
-        setBusy(false, runState.textContent);
-      }
+      const payload = {
+        project: projectFromForm(),
+        answers: answersFromForm()
+      };
+      runState.textContent = 'paid agent required';
+      output.innerHTML = `
+        <div class="report-card">
+          <div class="report-hero">
+            <h3>完整投资评估报告需要通过 Agent Client 付费生成</h3>
+            <p>网页端只用于了解产品和整理项目信息，不免费生成完整研报、不写入投资数据库、不参与 100 USDT 支持筛选。</p>
+            <div class="badge-row">
+              <span class="badge">付费端点 POST /evaluate</span>
+              <span class="badge">x402 支付 5 USDT</span>
+              <span class="badge">返回独立报告链接</span>
+            </div>
+          </div>
+          <div class="report-section">
+            <h4>Agent Client 调用后会返回</h4>
+            <ul class="report-list">
+              <li>request_id 和 report_token</li>
+              <li>新的 HTML 报告链接：/agent/reports/{report_token}</li>
+              <li>投资结果、评分卡、联系方式和数据库同步状态</li>
+            </ul>
+          </div>
+          <div class="report-section">
+            <h4>当前项目信息</h4>
+            <pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre>
+          </div>
+        </div>
+      `;
     });
 
     document.getElementById('clearBtn').addEventListener('click', () => {
@@ -788,7 +803,12 @@ def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
                         },
                     },
                     "responses": {
-                        "200": {"description": "Structured JSON report plus HTML report URL."},
+                        "200": {
+                            "description": (
+                                "Structured JSON report plus a paid HTML report_url at "
+                                "/agent/reports/{report_token}."
+                            )
+                        },
                         "400": {"description": "Invalid request."},
                         "402": {"description": "Payment required after x402 middleware is enabled."},
                     },
@@ -816,8 +836,9 @@ def a2mcp_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         "service": {
             "serviceName": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
             "serviceDescription": (
-                "① 对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断，输出 HTML/JSON 报告。\n"
-                "② 用户需提供 Agent 名称、链接或 ID、目标用户、问题、方案、定价、traction、差异化和融资叙事。"
+                "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n"
+                "② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n"
+                "③ 网页端只用于产品介绍，不免费生成完整研报，不参与入库和 100 USDT 支持筛选。"
             ),
             "serviceType": "A2MCP",
             "fee": os.getenv("SERVICE_FEE_USDT", "5"),
@@ -1033,6 +1054,15 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                 return
             html_response(self, 200, report_page(evaluation))
             return
+        if path.startswith("/agent/reports/"):
+            report_token = path.removeprefix("/agent/reports/").strip("/")
+            with connect() as conn:
+                evaluation = get_evaluation_by_token(conn, report_token)
+            if evaluation is None:
+                html_response(self, 404, "<h1>Report not found</h1>")
+                return
+            html_response(self, 200, report_page(evaluation))
+            return
         if path == "/health":
             json_response(
                 self,
@@ -1091,6 +1121,17 @@ class AgentVCHandler(BaseHTTPRequestHandler):
             json_response(self, 200, questions)
             return
 
+        if path == "/demo/evaluate" and os.getenv("DEMO_EVALUATE_ENABLED", "0") != "1":
+            json_response(
+                self,
+                403,
+                {
+                    "error": "paid_agent_required",
+                    "message": "网页端不提供免费完整研报；请通过 Agent client 付费调用 /evaluate。",
+                },
+            )
+            return
+
         if path in {"/evaluate", "/demo/evaluate"}:
             project = payload.get("project")
             answers = payload.get("answers", [])
@@ -1105,9 +1146,12 @@ class AgentVCHandler(BaseHTTPRequestHandler):
             fingerprint = project_fingerprint(project)
             user_key = submitter_key(project)
             contact_hint = str(project.get("contact") or project.get("email") or "")
+            report_token = secrets.token_urlsafe(18)
             with connect() as conn:
                 duplicate = duplicate_today(conn, project_fingerprint=fingerprint, submitter_key=user_key)
                 gate = apply_investment_gate(report, conn, duplicate=duplicate)
+                paid_report_url = f"{base_url(self)}/agent/reports/{report_token}"
+                report["paid_report_url"] = paid_report_url
                 report["award_result"] = gate
                 request_id = save_evaluation(
                     conn,
@@ -1118,10 +1162,13 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                     submitter_key=user_key,
                     duplicate=duplicate,
                     contact_hint=contact_hint,
+                    report_token=report_token,
                 )
             sync_status = sync_evaluation(
                 {
                     "request_id": request_id,
+                    "report_token": report_token,
+                    "paid_report_url": f"{base_url(self)}/agent/reports/{report_token}",
                     "project_fingerprint": fingerprint,
                     "submitter_key": user_key,
                     "duplicate_today": duplicate,
@@ -1135,7 +1182,9 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                 200,
                 {
                     "request_id": request_id,
-                    "report_url": f"/reports/{request_id}",
+                    "report_token": report_token,
+                    "report_url": f"{base_url(self)}/agent/reports/{report_token}",
+                    "legacy_report_url": f"{base_url(self)}/reports/{request_id}",
                     "investment_gate": gate,
                     "sync": sync_status,
                     "report": report,

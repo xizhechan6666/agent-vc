@@ -39,5 +39,7 @@ services:
         sync: false
       - key: DB_SYNC_SECRET
         sync: false
+      - key: DEMO_EVALUATE_ENABLED
+        value: 0
       - key: X402_ENABLED
         value: 1

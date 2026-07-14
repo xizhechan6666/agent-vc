@@ -46,6 +46,7 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "submitter_key": "ALTER TABLE evaluations ADD COLUMN submitter_key TEXT",
         "duplicate_today": "ALTER TABLE evaluations ADD COLUMN duplicate_today INTEGER NOT NULL DEFAULT 0",
         "contact_hint": "ALTER TABLE evaluations ADD COLUMN contact_hint TEXT",
+        "report_token": "ALTER TABLE evaluations ADD COLUMN report_token TEXT",
     }
     for column, statement in migrations.items():
         if column not in existing:
@@ -112,6 +113,7 @@ def save_evaluation(
     submitter_key: str = "",
     duplicate: bool = False,
     contact_hint: str = "",
+    report_token: str = "",
 ) -> int:
     cursor = conn.execute(
         """
@@ -126,9 +128,10 @@ def save_evaluation(
             submitter_key,
             duplicate_today,
             contact_hint,
+            report_token,
             report_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             project_name,
@@ -141,6 +144,7 @@ def save_evaluation(
             submitter_key,
             1 if duplicate else 0,
             contact_hint,
+            report_token,
             json.dumps(report, ensure_ascii=False),
         ),
     )
@@ -153,7 +157,7 @@ def get_evaluation(conn: sqlite3.Connection, evaluation_id: int) -> dict[str, An
         """
         SELECT id, created_at, project_name, total_score, recommendation,
                raw_eligible, final_candidate, batch_index, project_fingerprint,
-               submitter_key, duplicate_today, contact_hint, report_json
+               submitter_key, duplicate_today, contact_hint, report_token, report_json
         FROM evaluations
         WHERE id = ?
         """,
@@ -174,5 +178,39 @@ def get_evaluation(conn: sqlite3.Connection, evaluation_id: int) -> dict[str, An
         "submitter_key": row["submitter_key"],
         "duplicate_today": bool(row["duplicate_today"]),
         "contact_hint": row["contact_hint"],
+        "report_token": row["report_token"],
+        "report_url_kind": "legacy_id",
+        "report": json.loads(row["report_json"]),
+    }
+
+
+def get_evaluation_by_token(conn: sqlite3.Connection, report_token: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT id, created_at, project_name, total_score, recommendation,
+               raw_eligible, final_candidate, batch_index, project_fingerprint,
+               submitter_key, duplicate_today, contact_hint, report_token, report_json
+        FROM evaluations
+        WHERE report_token = ?
+        """,
+        (report_token,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "created_at": row["created_at"],
+        "project_name": row["project_name"],
+        "total_score": row["total_score"],
+        "recommendation": row["recommendation"],
+        "raw_eligible": bool(row["raw_eligible"]),
+        "final_candidate": bool(row["final_candidate"]),
+        "batch_index": row["batch_index"],
+        "project_fingerprint": row["project_fingerprint"],
+        "submitter_key": row["submitter_key"],
+        "duplicate_today": bool(row["duplicate_today"]),
+        "contact_hint": row["contact_hint"],
+        "report_token": row["report_token"],
+        "report_url_kind": "agent_token",
         "report": json.loads(row["report_json"]),
     }
