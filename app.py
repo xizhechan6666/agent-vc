@@ -518,7 +518,7 @@ INDEX_HTML = """<!doctype html>
     document.getElementById('evaluateBtn').addEventListener('click', async () => {
       setBusy(true, 'generating report');
       try {
-        const body = await postJson('/evaluate', {
+        const body = await postJson('/demo/evaluate', {
           project: projectFromForm(),
           answers: answersFromForm()
         });

@@ -89,8 +89,10 @@ Default rule: at most 1 investment candidate per 20 paid evaluations, and only i
 - `GET /openapi.json`
 - `POST /interview`
 - `POST /evaluate`
+- `POST /demo/evaluate`
 
 When `X402_ENABLED=1`, `POST /evaluate` returns HTTP 402 until the caller supplies a valid x402 payment signature.
+The browser demo uses `POST /demo/evaluate` so the web UI remains usable while the A2MCP endpoint stays payment-gated.
 
 `POST /evaluate` input shape:
 

@@ -104,3 +104,5 @@ X402_NETWORK=eip155:84532
 ```
 
 Unauthenticated callers receive HTTP 402. Clients pay, then replay the same request with the x402 payment signature header.
+
+The web demo at `/` calls `/demo/evaluate`, not `/evaluate`, so you can still test report generation in a browser. The A2MCP service endpoint remains `/evaluate`.

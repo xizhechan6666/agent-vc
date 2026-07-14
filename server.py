@@ -161,16 +161,7 @@ async def report(report_id: int) -> str:
     return report_page(evaluation)
 
 
-@app.post("/interview")
-async def interview(payload: dict[str, Any]) -> dict[str, Any]:
-    project = payload.get("project", payload)
-    if not isinstance(project, dict):
-        raise HTTPException(status_code=400, detail="invalid_project")
-    return generate_interview(project)
-
-
-@app.post("/evaluate")
-async def evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     project = payload.get("project")
     answers = payload.get("answers", [])
     if not isinstance(project, dict):
@@ -194,3 +185,23 @@ async def evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         "investment_gate": gate,
         "report": report,
     }
+
+
+@app.post("/interview")
+async def interview(payload: dict[str, Any]) -> dict[str, Any]:
+    project = payload.get("project", payload)
+    if not isinstance(project, dict):
+        raise HTTPException(status_code=400, detail="invalid_project")
+    return generate_interview(project)
+
+
+@app.post("/evaluate")
+async def evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    return run_evaluation(payload, request)
+
+
+@app.post("/demo/evaluate")
+async def demo_evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    if os.getenv("DEMO_EVALUATE_ENABLED", "1") != "1":
+        raise HTTPException(status_code=404, detail="Demo evaluation is disabled")
+    return run_evaluation(payload, request)
