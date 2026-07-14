@@ -18,11 +18,11 @@ services:
       - key: LLM_SSL_VERIFY
         value: 1
       - key: SERVICE_FEE_USDT
-        value: 10
+        value: 5
       - key: X402_PAY_TO
         value: 0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
       - key: X402_PRICE
-        value: $10.00
+        value: $5.00
       - key: X402_NETWORK
         value: eip155:84532
       - key: X402_SCHEME
@@ -33,5 +33,11 @@ services:
         value: 20
       - key: INVESTMENT_MAX_PER_WINDOW
         value: 1
+      - key: INVESTMENT_MINIMUM_SCORE
+        value: 88
+      - key: DB_SYNC_WEBHOOK_URL
+        sync: false
+      - key: DB_SYNC_SECRET
+        sync: false
       - key: X402_ENABLED
         value: 1

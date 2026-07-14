@@ -8,9 +8,16 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from agent_vc.evaluator import apply_investment_gate, evaluate_project, generate_interview
+from agent_vc.evaluator import (
+    apply_investment_gate,
+    evaluate_project,
+    generate_interview,
+    project_fingerprint,
+    submitter_key,
+)
 from agent_vc.prompt import INPUT_SCHEMA, REPORT_SCHEMA_HINT
-from agent_vc.store import connect, get_evaluation, save_evaluation
+from agent_vc.store import connect, duplicate_today, get_evaluation, save_evaluation
+from agent_vc.sync import sync_evaluation
 from app import INDEX_HTML, a2mcp_document, openapi_document, report_page
 
 
@@ -38,7 +45,7 @@ def configure_x402() -> None:
     except ModuleNotFoundError as exc:
         raise RuntimeError("Install dependencies with `pip install -r requirements.txt`") from exc
 
-    price = os.getenv("X402_PRICE", "$10.00")
+    price = os.getenv("X402_PRICE", "$5.00")
     network = os.getenv("X402_NETWORK", "eip155:84532")
     scheme = os.getenv("X402_SCHEME", "exact")
 
@@ -170,19 +177,40 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Expected array field: answers")
 
     report = evaluate_project(project, answers)
+    fingerprint = project_fingerprint(project)
+    user_key = submitter_key(project)
+    contact_hint = str(project.get("contact") or project.get("email") or "")
     with connect() as conn:
-        gate = apply_investment_gate(report, conn)
+        duplicate = duplicate_today(conn, project_fingerprint=fingerprint, submitter_key=user_key)
+        gate = apply_investment_gate(report, conn, duplicate=duplicate)
+        report["award_result"] = gate
         request_id = save_evaluation(
             conn,
             project_name=str(report.get("project_name") or project.get("name") or "Unnamed Agent"),
             report=report,
             gate=gate,
+            project_fingerprint=fingerprint,
+            submitter_key=user_key,
+            duplicate=duplicate,
+            contact_hint=contact_hint,
         )
+    sync_status = sync_evaluation(
+        {
+            "request_id": request_id,
+            "project_fingerprint": fingerprint,
+            "submitter_key": user_key,
+            "duplicate_today": duplicate,
+            "contact_hint": contact_hint,
+            "investment_gate": gate,
+            "report": report,
+        }
+    )
 
     return {
         "request_id": request_id,
         "report_url": absolute_url(request, f"/reports/{request_id}"),
         "investment_gate": gate,
+        "sync": sync_status,
         "report": report,
     }
 
