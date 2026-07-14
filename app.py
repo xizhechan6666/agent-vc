@@ -82,6 +82,20 @@ INDEX_HTML = """<!doctype html>
       color: var(--muted);
       white-space: nowrap;
     }
+    .contact-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
+    }
+    .contact-top a {
+      color: var(--accent-dark);
+      font-weight: 700;
+      text-decoration: none;
+    }
     .dot {
       width: 9px;
       height: 9px;
@@ -347,6 +361,10 @@ INDEX_HTML = """<!doctype html>
         align-items: flex-start;
         flex-direction: column;
       }
+      .contact-top {
+        justify-content: flex-start;
+        text-align: left;
+      }
       .landing, main {
         grid-template-columns: 1fr;
         padding: 14px;
@@ -359,7 +377,11 @@ INDEX_HTML = """<!doctype html>
   <header>
     <div class="topbar">
       <h1>NVC Agent VC</h1>
-      <div class="status"><span class="dot"></span><span id="health">checking</span></div>
+      <div class="contact-top">
+        <span>请关注并联系推特：<a href="https://x.com/jch47643085" target="_blank" rel="noreferrer">@jch47643085</a></span>
+        <span>TG：<a href="https://t.me/maxjiang" target="_blank" rel="noreferrer">@maxjiang</a></span>
+        <span class="status"><span class="dot"></span><span id="health">checking</span></span>
+      </div>
     </div>
   </header>
   <div class="landing">

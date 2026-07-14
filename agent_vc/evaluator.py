@@ -331,7 +331,10 @@ def _looks_like_wallet(value: Any) -> bool:
 
 
 def default_contact_cta() -> str:
-    return os.getenv("CONTACT_CTA", "请通过页面中预留的联系方式提交项目名、报告编号和钱包地址，完成身份核验后进入后续流程。")
+    return os.getenv(
+        "CONTACT_CTA",
+        "请关注并联系推特 @jch47643085 或 TG @maxjiang，并提交项目名、报告编号和钱包地址，完成身份核验后进入后续流程。",
+    )
 
 
 def selected_next_steps() -> list[str]:
