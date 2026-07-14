@@ -1,38 +1,189 @@
 # Agent VC
 
-Agent VC is a small HTTP service for an OKX.AI A2MCP-style fixed-price report product.
+Agent VC is a completed OKX.AI A2MCP-style paid report service for Agent founders.
 
-The product flow is:
+It evaluates early Agent projects like a lightweight VC committee: founder questions, scoring, investment memo, improvement plan, optional Agent wallet verification, and a server-side candidate gate for 100 USDT early support.
 
-1. A founder submits an Agent project.
-2. Agent VC generates investor questions.
-3. The founder answers.
-4. Agent VC returns a structured investment diagnosis report.
-5. A hard quota gate decides whether the project enters the 100U investment candidate pool.
+Live service:
 
-The report engine is independent from listing. In production, x402 / **OKX Agent Payments Protocol** wraps `/evaluate` as the paid Agent Client endpoint, while the browser page remains a landing and paid-call guide.
-
-## Run Locally
-
-```bash
-cd /Users/xizhe/agent-vc
-python3 app.py
+```text
+https://agent-vc-4a3m.onrender.com
 ```
 
-For the production FastAPI/x402 entrypoint:
+## Current Product Flow
+
+1. A founder or Agent Client submits an Agent project.
+2. `/interview` can generate three investor follow-up questions.
+3. The paid Agent Client calls `/evaluate`.
+4. x402 returns HTTP 402 until the caller pays through **OKX Agent Payments Protocol**.
+5. After payment replay, the service generates the real report, stores it, applies duplicate and quota rules, and returns JSON plus `report_url`.
+6. The user reads the full HTML report at `/agent/reports/{report_token}`.
+
+## Surfaces
+
+The browser page and the Agent Client endpoint are intentionally different.
+
+Human web page:
+
+```text
+GET /
+```
+
+- Product introduction.
+- Project draft form.
+- Paid-call instructions.
+- No free full report.
+- No database write.
+- No investment quota decision.
+
+Paid Agent endpoint:
+
+```text
+POST /evaluate
+```
+
+- x402-protected when `X402_ENABLED=1`.
+- Generates the real JSON report.
+- Saves the evaluation.
+- Returns a private tokenized HTML report link.
+- Applies duplicate checks and investment quota.
+
+`POST /demo/evaluate` is disabled by default and returns 403 unless explicitly enabled for internal testing.
+
+## Public Endpoints
+
+```text
+GET  /health
+GET  /schema
+GET  /a2mcp.json
+GET  /openapi.json
+GET  /integration-check
+POST /interview
+POST /evaluate
+POST /demo/evaluate
+GET  /agent/reports/{report_token}
+```
+
+`/integration-check` is the safest quick sanity check. It returns x402 status, paid endpoint, report URL template, schema availability, and LLM configuration status without exposing secrets.
+
+## A2MCP Registration
+
+Register this as an API/A2MCP service, not A2A.
+
+Use:
+
+```text
+serviceName: Agent VC Investment Diagnosis
+serviceType: A2MCP
+fee: 5
+endpoint: https://agent-vc-4a3m.onrender.com/evaluate
+```
+
+The service manifest is available at:
+
+```text
+https://agent-vc-4a3m.onrender.com/a2mcp.json
+```
+
+It includes `inputSchema` and `outputSchema` so a compatible Agent Client can collect the right request fields and display the returned report data.
+
+## x402 Payment
+
+Current working production configuration:
+
+```bash
+X402_ENABLED=1
+X402_PRICE=$5.00
+X402_NETWORK=eip155:84532
+X402_SCHEME=exact
+```
+
+Unauthenticated calls to `/evaluate` return HTTP 402 with a `PAYMENT-REQUIRED` header. The header contains x402 v2 requirements and Bazaar discovery metadata.
+
+The current x402 Python SDK provides a default USDC asset for `eip155:84532`. Do not switch payment to X Layer `eip155:196` until the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed.
+
+## Response Contract
+
+Paid `/evaluate` returns JSON with:
+
+```json
+{
+  "request_id": 1,
+  "report_token": "...",
+  "report_url": "https://agent-vc-4a3m.onrender.com/agent/reports/{report_token}",
+  "investment_gate": {},
+  "client_summary": {
+    "chat_summary": "...",
+    "result_first_message": "...",
+    "founder_next_action": "...",
+    "shareable_text": "...",
+    "report_url": "..."
+  },
+  "sync": {},
+  "report": {}
+}
+```
+
+Agent Clients should show `client_summary` in chat and offer `report_url` for the full HTML report.
+
+## Investment Gate
+
+The LLM only makes a raw recommendation. Final candidate status is controlled by deterministic server rules.
+
+Default rules:
+
+```bash
+INVESTMENT_WINDOW_SIZE=20
+INVESTMENT_MAX_PER_WINDOW=1
+INVESTMENT_MINIMUM_SCORE=88
+```
+
+Meaning:
+
+- 5 USDT assessment fee.
+- Up to 1 candidate per 20 paid evaluations.
+- Candidate support amount is 100 USDT.
+- Selected projects may also receive up to 500 USDT worth of project promotion and founder personal-brand support.
+- Duplicate project or submitter submissions on the same UTC date do not trigger candidate status.
+- Manual review is required before any payout.
+
+The LLM must never directly trigger payout.
+
+## Optional Wallet Verification
+
+`agent_wallet_address`, `wallet_chain`, and `wallet_signature` are optional.
+
+Current implementation:
+
+- Validates X Layer-style EVM addresses.
+- Adds an OKLink X Layer explorer link.
+- Adds a conservative verification bonus when evidence exists.
+- Marks unverified submitted addresses as weak evidence.
+- Does not claim full transaction forensics.
+
+Deeper transaction graph analysis should be added only after a reliable X Layer indexer/API source is confirmed.
+
+## Local Development
+
+Install:
 
 ```bash
 pip install -r requirements.txt
+```
+
+Run the production FastAPI entrypoint locally:
+
+```bash
 uvicorn server:app --host 127.0.0.1 --port 8787
 ```
 
-Health check:
+For a quick no-x402 local smoke test:
 
 ```bash
-curl http://127.0.0.1:8787/health
+X402_ENABLED=0 uvicorn server:app --host 127.0.0.1 --port 8787
 ```
 
-Generate VC questions:
+Generate follow-up questions:
 
 ```bash
 curl -s http://127.0.0.1:8787/interview \
@@ -40,7 +191,7 @@ curl -s http://127.0.0.1:8787/interview \
   --data @sample_request.json
 ```
 
-Generate a report:
+Generate a local report only when x402 is disabled:
 
 ```bash
 curl -s http://127.0.0.1:8787/evaluate \
@@ -48,84 +199,42 @@ curl -s http://127.0.0.1:8787/evaluate \
   --data @sample_request.json
 ```
 
-## LLM Configuration
-
-The service supports OpenAI-compatible chat completions. DeepSeek is the default endpoint.
+## Environment
 
 ```bash
-export LLM_API_KEY='...'
-export LLM_BASE_URL='https://api.deepseek.com/chat/completions'
-export LLM_MODEL='deepseek-chat'
-python3 app.py
+LLM_API_KEY=...
+LLM_BASE_URL=https://api.deepseek.com/chat/completions
+LLM_MODEL=deepseek-chat
+SERVICE_FEE_USDT=5
+X402_ENABLED=1
+X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
+X402_PRICE=$5.00
+X402_NETWORK=eip155:84532
+X402_SCHEME=exact
+DEMO_EVALUATE_ENABLED=0
 ```
 
-If no API key is set, the service returns a local fallback report. That is useful for integration tests, but not for final product quality.
+Do not commit API keys.
 
-On this local macOS Python install, HTTPS certificate verification may fail because the OpenSSL cert store is empty. `start_with_key.sh` sets `LLM_SSL_VERIFY=0` for local development. On a real server, install certificates and set `LLM_SSL_VERIFY=1`.
-
-To avoid saving the key in shell history, you can start the service with:
+## Verification
 
 ```bash
-chmod +x start_with_key.sh
-./start_with_key.sh
+.venv/bin/python -m py_compile server.py app.py agent_vc/*.py
 ```
-
-## Investment Quota
-
-The LLM can only recommend investment. Final candidate status is controlled by hard server-side rules:
 
 ```bash
-export INVESTMENT_WINDOW_SIZE=20
-export INVESTMENT_MAX_PER_WINDOW=1
+curl -i -X POST https://agent-vc-4a3m.onrender.com/evaluate \
+  -H 'Content-Type: application/json' \
+  --data @sample_request.json
 ```
 
-Default rule: at most 1 investment candidate per 20 paid evaluations, and only if `total_score >= 88`.
+Expected unpaid production result:
 
-## Endpoints
+- HTTP 402.
+- `PAYMENT-REQUIRED` header exists.
+- Decoded x402 payload has `x402Version: 2`.
+- Amount is `5000000`.
+- Network is `eip155:84532`.
+- Bazaar input method is `POST`.
 
-- `GET /health`
-- `GET /schema`
-- `GET /a2mcp.json`
-- `GET /openapi.json`
-- `GET /integration-check`
-- `POST /interview`
-- `POST /evaluate`
-- `POST /demo/evaluate`
-
-When `X402_ENABLED=1`, `POST /evaluate` returns HTTP 402 until the caller supplies a valid x402 payment signature.
-`POST /demo/evaluate` is disabled by default. The browser page must not provide a free full report, database entry, or investment quota decision.
-
-`POST /evaluate` input shape:
-
-```json
-{
-  "project": {
-    "name": "Agent name",
-    "agent_url": "OKX.AI URL or Agent ID",
-    "one_liner": "One sentence pitch",
-    "target_user": "Who pays",
-    "problem": "Problem",
-    "solution": "Solution",
-    "pricing": "Pricing",
-    "traction": "Sales, reviews, tasks, usage, testimonials",
-    "differentiation": "Why not ChatGPT/Doubao/Codex/existing agents",
-    "founder_pitch": "Why this deserves investment",
-    "risks": "Known weak spots"
-  },
-  "answers": [
-    {
-      "question": "Investor question",
-      "answer": "Founder answer"
-    }
-  ]
-}
-```
-
-## Next Build Steps
-
-1. Tune the prompt with 5-10 real Agent examples.
-2. Register the public `/evaluate` URL as an OKX.AI A2MCP service.
-3. Add deeper indexed wallet transaction analysis when the X Layer data source is finalized.
-4. Add a payout workflow later; never let the LLM trigger payouts directly.
-
-Deployment notes are in `DEPLOY.md`.
+More operational details are in `OPERATIONS.md`; deployment details are in `DEPLOY.md`.

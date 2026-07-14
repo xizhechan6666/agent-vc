@@ -418,7 +418,7 @@ def normalize_confidence_notes(value: Any, project: dict[str, Any]) -> list[str]
         notes.append("未提供定价，商业模式判断以问题强度和使用场景为主。")
     wallet_research = project.get("wallet_research") if isinstance(project.get("wallet_research"), dict) else {}
     if wallet_research.get("status") in {"basic_check", "ownership_supported"}:
-        notes.append("已提供 Agent 钱包地址，本版将其作为可选验证线索；完整交易穿透仍需后续接入索引 API。")
+        notes.append("已提供 Agent 钱包地址，本次将其作为可选验证线索；完整交易穿透需要接入可靠的 X Layer 索引 API。")
     return notes
 
 

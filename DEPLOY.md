@@ -1,86 +1,72 @@
-# Deploy Agent VC
+# Deploy And Register Agent VC
 
-## What Has To Be Public
+This document describes the current production deployment and OKX.AI registration values.
 
-OKX.AI A2MCP registration needs a public HTTPS endpoint. For this service, use:
-
-```text
-https://YOUR_DOMAIN/evaluate
-```
-
-Helpful discovery pages:
+## Production URLs
 
 ```text
-https://YOUR_DOMAIN/
-https://YOUR_DOMAIN/health
-https://YOUR_DOMAIN/a2mcp.json
-https://YOUR_DOMAIN/openapi.json
+Web page:        https://agent-vc-4a3m.onrender.com/
+Paid endpoint:  https://agent-vc-4a3m.onrender.com/evaluate
+Manifest:       https://agent-vc-4a3m.onrender.com/a2mcp.json
+Health:         https://agent-vc-4a3m.onrender.com/health
+Integration:    https://agent-vc-4a3m.onrender.com/integration-check
+OpenAPI:        https://agent-vc-4a3m.onrender.com/openapi.json
 ```
 
-## Environment Variables
+Use `/integration-check` before review or demo. It returns a no-secret status object confirming the paid endpoint, x402 status, report URL template, LLM status, and Agent Client response contract.
+
+## Required Environment Variables
 
 Set these on the cloud host:
 
 ```bash
 HOST=0.0.0.0
 PORT=8787
-PUBLIC_BASE_URL=https://YOUR_DOMAIN
+PUBLIC_BASE_URL=https://agent-vc-4a3m.onrender.com
+
 LLM_API_KEY=...
 LLM_BASE_URL=https://api.deepseek.com/chat/completions
 LLM_MODEL=deepseek-chat
 LLM_SSL_VERIFY=1
+
 SERVICE_FEE_USDT=5
+INVESTMENT_WINDOW_SIZE=20
+INVESTMENT_MAX_PER_WINDOW=1
+INVESTMENT_MINIMUM_SCORE=88
+
+DEMO_EVALUATE_ENABLED=0
+
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
 X402_PRICE=$5.00
 X402_NETWORK=eip155:84532
 X402_SCHEME=exact
-INVESTMENT_WINDOW_SIZE=20
-INVESTMENT_MAX_PER_WINDOW=1
+X402_MAX_TIMEOUT_SECONDS=300
 ```
 
-Do not commit API keys.
+Do not commit API keys. On Render, `LLM_API_KEY`, `DB_SYNC_WEBHOOK_URL`, and `DB_SYNC_SECRET` are marked `sync: false`.
 
-On Render, `LLM_API_KEY` is defined with `sync: false` in `render.yaml`, so Render prompts you for the value in the dashboard instead of storing it in Git.
+## Render Deployment
 
-## Docker
-
-Build locally:
-
-```bash
-docker build -t agent-vc .
-```
-
-Run locally:
-
-```bash
-docker run --rm -p 8787:8787 \
-  -e LLM_API_KEY='...' \
-  -e PUBLIC_BASE_URL='http://127.0.0.1:8787' \
-  agent-vc
-```
-
-## Render
-
-`render.yaml` is included. In the Render dashboard, add secret environment variables:
+`render.yaml` deploys the FastAPI entrypoint:
 
 ```text
-LLM_API_KEY
+uvicorn server:app --host 0.0.0.0 --port 8787
 ```
 
-After deploy, open:
+The included Render plan is `free`. Free services can sleep when idle and local SQLite storage is not durable. Upgrade the instance and attach durable storage before relying on it for long-running production accounting.
+
+## OKX.AI A2MCP Registration
+
+Register an API/A2MCP service, not an A2A task service.
+
+Use the values from:
 
 ```text
-https://YOUR_RENDER_URL/a2mcp.json
+https://agent-vc-4a3m.onrender.com/a2mcp.json
 ```
 
-Copy `service.endpoint`, `service.fee`, `service.serviceName`, and `service.serviceDescription` into the OKX.AI ASP service registration flow.
-
-The included Render plan is `free` to avoid accidental charges. Free web services can spin down when idle and their local SQLite data is not persistent. Upgrade the instance type when you need 24/7 availability.
-
-## OKX.AI Registration Fields
-
-For an API service:
+Current registration values:
 
 ```json
 {
@@ -88,35 +74,100 @@ For an API service:
   "serviceDescription": "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n③ 网页端只用于产品介绍，不免费生成完整研报，不参与入库和 100 USDT 支持筛选。",
   "serviceType": "A2MCP",
   "fee": "5",
-  "endpoint": "https://YOUR_DOMAIN/evaluate"
+  "endpoint": "https://agent-vc-4a3m.onrender.com/evaluate"
 }
 ```
 
-## x402 Payment Gate
+The manifest also includes `inputSchema` and `outputSchema`. A compatible Agent Client should use those schemas to collect the project fields and display `client_summary` plus `report_url`.
 
-The deployed `/evaluate` endpoint is protected by x402 when:
+## x402 Runtime Behavior
+
+Unpaid request:
 
 ```bash
-X402_ENABLED=1
-X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
-X402_PRICE=$5.00
-X402_NETWORK=eip155:84532
+curl -i -X POST https://agent-vc-4a3m.onrender.com/evaluate \
+  -H 'Content-Type: application/json' \
+  --data @sample_request.json
 ```
 
-Unauthenticated callers receive HTTP 402. Clients pay, then replay the same request with the x402 payment signature header.
+Expected response:
 
-The web page at `/` is only a product landing and paid Agent Client guide. By default, `/demo/evaluate` returns 403 so browser users cannot receive a free full report, enter the investment database, or consume quota. The A2MCP service endpoint remains `/evaluate`.
+- HTTP 402.
+- `PAYMENT-REQUIRED` header exists.
+- Decoded payload uses `x402Version: 2`.
+- `accepts[0].network` is `eip155:84532`.
+- `accepts[0].amount` is `5000000`.
+- `extensions.bazaar.info.input.method` is `POST`.
+- `extensions.bazaar.info.input.body.required` contains `project`.
 
-Before registration or review, open:
+After user confirmation, the Agent Client signs the x402 payment and replays the same request with the returned payment authorization header. The server then returns the report JSON and stores the evaluation.
 
-```text
-https://YOUR_DOMAIN/integration-check
-```
+## Web Page Boundary
 
-It returns a no-secret status object confirming the paid endpoint, x402 status, report URL template, and Agent Client response contract.
+The web page at `/` is not the paid report endpoint.
+
+It can:
+
+- Explain the product.
+- Generate non-paid follow-up questions through `/interview`.
+- Show the project JSON that should be submitted through Agent Client.
+
+It cannot:
+
+- Generate a free full investment report.
+- Enter the investment database.
+- Consume the 100 USDT support quota.
+- Bypass x402.
+
+`/demo/evaluate` stays disabled by default and returns 403.
 
 ## Network Note
 
-The current x402 Python SDK has a default stablecoin asset for `eip155:84532`, so this repo uses it for the working one-shot payment gate. X Layer identity and Agent wallet verification still use X Layer (`eip155:196`) conceptually.
+Current working x402 payment network:
 
-Do not switch `X402_NETWORK` to `eip155:196` until the OKX x402 facilitator and supported stablecoin contract for X Layer are confirmed. If you switch early without an explicit supported asset configuration, the server may fail to produce a valid payment requirement.
+```bash
+X402_NETWORK=eip155:84532
+```
+
+The installed x402 Python SDK provides a default USDC asset for `eip155:84532`. X Layer identity and optional Agent wallet verification remain X Layer-oriented (`eip155:196`), but payment should not be switched to `eip155:196` until the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed.
+
+Switching the payment network early can break HTTP 402 generation.
+
+## Local Verification
+
+```bash
+.venv/bin/python -m py_compile server.py app.py agent_vc/*.py
+```
+
+```bash
+X402_ENABLED=1 \
+X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c \
+X402_PRICE='$5.00' \
+X402_NETWORK=eip155:84532 \
+.venv/bin/python - <<'PY'
+import base64, json
+from fastapi.testclient import TestClient
+import server
+
+c = TestClient(server.app)
+r = c.post('/evaluate', json={
+    'project': {
+        'name': 'Demo Agent',
+        'one_liner': '帮助 Agent 创业者获得 VC 式反馈',
+        'target_user': 'OKX.AI Agent 创业者',
+        'problem': '早期项目缺少付费场景、增长路径和投资叙事'
+    }
+})
+print(r.status_code)
+raw = r.headers.get('payment-required')
+print(bool(raw))
+if raw:
+    data = json.loads(base64.b64decode(raw))
+    print(data.get('x402Version'))
+    print(data['accepts'][0]['network'])
+    print(data['accepts'][0]['amount'])
+    print(data.get('extensions', {}).get('bazaar', {}).get('info', {}).get('input', {}).get('method'))
+PY
+```
+
+The final real-payment replay must be tested from a supported Agent Client with an authenticated Agentic Wallet and sufficient supported stablecoin balance.

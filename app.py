@@ -465,7 +465,7 @@ INDEX_HTML = """<!doctype html>
         <label>钱包链（默认 X Layer）
           <input name="wallet_chain" value="xlayer">
         </label>
-        <label>钱包签名凭证（可选，后续用于证明钱包属于提交方）
+        <label>钱包签名凭证（可选，用于证明钱包属于提交方）
           <input name="wallet_signature" value="" placeholder="可暂时留空">
         </label>
         <label>解决方案
@@ -481,7 +481,7 @@ INDEX_HTML = """<!doctype html>
           <textarea name="onchain_evidence">可补充调用记录、交易记录、用户案例、收入截图说明或链上地址说明。</textarea>
         </label>
         <label>差异化
-          <textarea name="differentiation">不是通用聊天，而是固定 VC 诊断流程、评分卡、投资候选硬门控和 OKX.AI 生态语境。</textarea>
+          <textarea name="differentiation">固定 VC 诊断流程、评分卡、投资候选硬门控和 OKX.AI 生态语境，比通用聊天更适合项目方复盘和传播。</textarea>
         </label>
         <label>融资叙事
           <textarea name="founder_pitch">OKX.AI 早期 Agent 数据稀缺，项目方更需要被投资人式追问和优化，而不是钱包流水分析。</textarea>
@@ -492,7 +492,7 @@ INDEX_HTML = """<!doctype html>
         </details>
         <div class="actions">
           <button type="button" id="interviewBtn">生成追问</button>
-          <button type="button" id="evaluateBtn">生成报告</button>
+          <button type="button" id="evaluateBtn">查看付费生成方式</button>
           <button type="button" class="secondary" id="clearBtn">清空回答</button>
         </div>
       </form>
@@ -504,7 +504,7 @@ INDEX_HTML = """<!doctype html>
         <span class="message" id="runState">ready</span>
       </div>
       <div class="output">
-        <div id="output" class="report-host">点击“生成追问”或“生成报告”。</div>
+        <div id="output" class="report-host">点击“生成追问”或“查看付费生成方式”。</div>
       </div>
     </section>
   </main>
@@ -711,7 +711,7 @@ INDEX_HTML = """<!doctype html>
         runState.textContent = '正在生成补充问题…';
         const body = await postJson('/interview', { project: projectFromForm() });
         renderQuestions(body.questions || []);
-        output.innerHTML = '<p class="message">补充问题已生成，请在左侧回答后生成完整投资评估报告。</p>';
+        output.innerHTML = '<p class="message">补充问题已生成。完整投资评估报告需要通过 Agent Client 付费调用生成。</p>';
         runState.textContent = '补充问题已生成';
       } catch (error) {
         output.innerHTML = `<span class="error">${error.message}</span>`;

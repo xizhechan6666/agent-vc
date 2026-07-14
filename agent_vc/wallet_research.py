@@ -67,7 +67,7 @@ def build_wallet_research(project: dict[str, Any]) -> dict[str, Any]:
         positive_signals.append("钱包所有权已有签名或 Agent Client 支付方来源支持。")
     else:
         red_flags.append("尚未完成钱包签名或 x402 付款方绑定，不能证明该地址一定属于提交方。")
-        notes.append("后续版本应要求该钱包签名 nonce，或直接读取 x402 payer/signer wallet。")
+        notes.append("提高该项可信度需要钱包签名 nonce，或由 x402 payer/signer wallet 直接绑定。")
 
     if str(project.get("onchain_evidence") or "").strip():
         integrity_score += 2

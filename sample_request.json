@@ -6,9 +6,9 @@
     "target_user": "已经有 Agent 原型、但不知道如何定价和获得首批用户的 OKX.AI ASP。",
     "problem": "很多 Agent 只是功能演示，缺少清晰付费场景、增长路径和投资叙事。",
     "solution": "通过项目问答、VC rubric 和投资委员会模拟，输出结构化诊断报告。",
-    "pricing": "10 USDC/次，深度版 30 USDC/次。",
+    "pricing": "5 USDT/次测评；入选项目可获得 100 USDT 早期支持。",
     "traction": "已有 5 个项目方愿意试用，暂无正式收入。",
-    "differentiation": "不是通用聊天，而是固定 VC 诊断流程、评分卡、投资候选硬门控和 OKX.AI 生态语境。",
+    "differentiation": "固定 VC 诊断流程、评分卡、投资候选硬门控和 OKX.AI 生态语境，比通用聊天更适合项目方复盘和传播。",
     "founder_pitch": "OKX.AI 早期 Agent 数据稀缺，项目方更需要被投资人式追问和优化，而不是钱包流水分析。",
     "risks": "报告质量依赖 prompt 和模型；投资候选需要严格控制比例。"
   },
