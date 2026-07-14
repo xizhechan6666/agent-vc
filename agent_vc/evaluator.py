@@ -10,6 +10,7 @@ from typing import Any
 from . import llm
 from .prompt import INTERVIEW_PROMPT, REPORT_SCHEMA_HINT, SYSTEM_PROMPT
 from .store import quota_preview
+from .wallet_research import build_wallet_research, wallet_bonus, wallet_evidence_lines
 
 
 SCORE_KEYS = {
@@ -80,6 +81,8 @@ def generate_interview(project: dict[str, Any]) -> dict[str, Any]:
 
 
 def evaluate_project(project: dict[str, Any], answers: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    project = dict(project)
+    project["wallet_research"] = build_wallet_research(project)
     payload = {
         "task": "evaluate_agent_startup",
         "project": project,
@@ -132,6 +135,7 @@ def normalize_report(report: dict[str, Any], project: dict[str, Any]) -> dict[st
     report.setdefault("missing_information", [])
     report.setdefault("data_used_as_supporting_evidence", [])
     report.setdefault("verification_evidence", verification_evidence(project))
+    report["wallet_research"] = normalize_wallet_research(report.get("wallet_research"), project)
     report.setdefault("reapply_conditions", [])
     report["memo_sections"] = normalize_memo_sections(report.get("memo_sections"), report, project)
     report["score_explanations"] = normalize_score_explanations(report.get("score_explanations"), normalized_scores)
@@ -200,6 +204,8 @@ def build_client_summary(report: dict[str, Any], gate: dict[str, Any], report_ur
     primary_gap = missing_items[0] if missing_items else _first_list_item(report.get("risks"), "仍需补充真实用户、产品和复购证据。")
     score = int(report.get("total_score", 0))
     confidence = str(report.get("confidence_level") or "medium")
+    wallet_research = report.get("wallet_research") if isinstance(report.get("wallet_research"), dict) else {}
+    wallet_line = wallet_summary_line(wallet_research)
     short_verdict = str(memo.get("investment_decision") or report.get("one_line_verdict") or gate.get("reason") or "")
     if len(short_verdict) > 180:
         short_verdict = short_verdict[:177].rstrip() + "..."
@@ -224,7 +230,19 @@ def build_client_summary(report: dict[str, Any], gate: dict[str, Any], report_ur
         "result_first_message": headline,
         "founder_next_action": primary_next_step,
         "shareable_text": shareable_text,
+        "wallet_verification_line": wallet_line,
     }
+
+
+def wallet_summary_line(wallet_research: dict[str, Any]) -> str:
+    status = wallet_research.get("status")
+    if status == "not_provided" or not status:
+        return "未提供 Agent 钱包，本次不计入链上验证加分。"
+    if status == "invalid_address":
+        return "已提供钱包字段，但地址格式无法作为 X Layer EVM 地址核验。"
+    if wallet_research.get("verified_ownership"):
+        return "已提供 Agent 钱包，并有签名或付款方来源支持，可作为验证加分线索。"
+    return "已提供 Agent 钱包和 OKLink 核验链接，但尚未完成所有权签名或 x402 付款方绑定。"
 
 
 def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm_error: str) -> dict[str, Any]:
@@ -290,6 +308,7 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
         "pricing_feedback": "先用低门槛单次付费测试转化，再根据复购和结果价值提价。",
         "data_used_as_supporting_evidence": [f"local_fallback_fingerprint:{fingerprint}"],
         "verification_evidence": verification_evidence(project),
+        "wallet_research": normalize_wallet_research(None, project),
         "reapply_conditions": ["补充真实产品链接、用户证据或链上可验证数据后，可再次测评。"],
         "contact_cta": default_contact_cta(),
         "missing_information": ["LLM_API_KEY", f"llm_error:{llm_error}"],
@@ -397,7 +416,30 @@ def normalize_confidence_notes(value: Any, project: dict[str, Any]) -> list[str]
         notes.append("未提供 traction、钱包或链上证据，验证加分和投资候选判断会更保守。")
     if not project.get("pricing"):
         notes.append("未提供定价，商业模式判断以问题强度和使用场景为主。")
+    wallet_research = project.get("wallet_research") if isinstance(project.get("wallet_research"), dict) else {}
+    if wallet_research.get("status") in {"basic_check", "ownership_supported"}:
+        notes.append("已提供 Agent 钱包地址，本版将其作为可选验证线索；完整交易穿透仍需后续接入索引 API。")
     return notes
+
+
+def normalize_wallet_research(value: Any, project: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(value, dict) and value.get("status"):
+        base = value
+    else:
+        base = project.get("wallet_research") if isinstance(project.get("wallet_research"), dict) else build_wallet_research(project)
+    return {
+        "status": str(base.get("status") or "not_provided"),
+        "chain": str(base.get("chain") or "xlayer"),
+        "chain_id": base.get("chain_id"),
+        "address": str(base.get("address") or ""),
+        "verified_ownership": bool(base.get("verified_ownership")),
+        "explorer_url": str(base.get("explorer_url") or ""),
+        "integrity_score": int(base.get("integrity_score") or 0),
+        "metrics": base.get("metrics") if isinstance(base.get("metrics"), dict) else {},
+        "positive_signals": [str(item) for item in (base.get("positive_signals") or [])],
+        "red_flags": [str(item) for item in (base.get("red_flags") or [])],
+        "notes": [str(item) for item in (base.get("notes") or [])],
+    }
 
 
 def fallback_memo_sections(project: dict[str, Any]) -> dict[str, Any]:
@@ -509,7 +551,7 @@ def verification_bonus_from_project(project: dict[str, Any]) -> int:
     if _looks_like_url(project.get("website")) or _looks_like_url(project.get("social")):
         bonus += 3
     if _looks_like_wallet(project.get("wallet_address")):
-        bonus += 5
+        bonus += 2
     evidence_text = " ".join(
         str(project.get(key, ""))
         for key in ("traction", "onchain_evidence", "verification", "launched_product")
@@ -518,6 +560,8 @@ def verification_bonus_from_project(project: dict[str, Any]) -> int:
         bonus += 4
     if len(evidence_text) > 160:
         bonus += 2
+    wallet_research = project.get("wallet_research") if isinstance(project.get("wallet_research"), dict) else build_wallet_research(project)
+    bonus += wallet_bonus(wallet_research)
     return min(bonus, SCORE_KEYS["verification_bonus"])
 
 
@@ -529,6 +573,7 @@ def verification_evidence(project: dict[str, Any]) -> list[str]:
         evidence.append(f"产品链接：{project.get('product_url')}")
     if project.get("wallet_address"):
         evidence.append(f"钱包地址：{project.get('wallet_address')}")
+    evidence.extend(wallet_evidence_lines(project.get("wallet_research") if isinstance(project.get("wallet_research"), dict) else {}))
     if project.get("website"):
         evidence.append(f"官网：{project.get('website')}")
     if project.get("social"):

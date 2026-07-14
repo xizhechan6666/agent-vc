@@ -408,7 +408,7 @@ INDEX_HTML = """<!doctype html>
     <div class="landing-panel">
       <h2>让 Agent 创业项目接受一次 VC 式测评</h2>
       <p>NVC 会像早期投资委员会一样追问项目、评分、给出改进建议，并判断是否进入 100 USDT 早期投资支持候选。</p>
-      <p>钱包地址、已上线产品和链上数据不是必填项，但会作为真实产品验证加分。</p>
+      <p>Agent 钱包、已上线产品和链上数据不是必填项，但会作为真实产品验证加分。</p>
       <div class="actions">
         <button type="button" onclick="document.getElementById('assessment').scrollIntoView({behavior:'smooth'})">开始测评</button>
       </div>
@@ -459,8 +459,14 @@ INDEX_HTML = """<!doctype html>
         <label>社群/X/Telegram（可选）
           <input name="social" value="">
         </label>
-        <label>钱包地址（可选加分项）
-          <input name="wallet_address" value="">
+        <label>Agent 钱包地址（X Layer，可选加分项）
+          <input name="agent_wallet_address" value="" placeholder="0x...">
+        </label>
+        <label>钱包链（默认 X Layer）
+          <input name="wallet_chain" value="xlayer">
+        </label>
+        <label>钱包签名凭证（可选，后续用于证明钱包属于提交方）
+          <input name="wallet_signature" value="" placeholder="可暂时留空">
         </label>
         <label>解决方案
           <textarea name="solution">通过项目问答、VC rubric 和投资委员会模拟，输出结构化诊断报告。</textarea>
@@ -579,6 +585,7 @@ INDEX_HTML = """<!doctype html>
       const discussion = report.committee_discussion || {};
       const plan = report.improvement_plan || {};
       const understanding = report.project_understanding || {};
+      const walletResearch = report.wallet_research || {};
       const finalCandidate = gate.final_candidate === true;
       const nextSteps = gate.next_steps || [];
       const scoreRows = Object.entries(scores).map(([key, value]) => {
@@ -646,6 +653,15 @@ INDEX_HTML = """<!doctype html>
             <h4>定位与定价</h4>
             ${paragraph(report.suggested_positioning)}
             ${paragraph(report.pricing_feedback)}
+          </div>
+          <div class="report-section">
+            <h4>Agent 钱包验证</h4>
+            ${paragraph(`状态：${walletResearch.status || 'not_provided'}；链：${walletResearch.chain || 'xlayer'}；所有权支持：${walletResearch.verified_ownership ? '是' : '否'}`)}
+            ${walletResearch.explorer_url ? `<p><a class="report-link" href="${escapeHtml(walletResearch.explorer_url)}" target="_blank" rel="noreferrer">打开 OKLink X Layer 钱包页面</a></p>` : '<p class="message">未提供可核验钱包地址。</p>'}
+            <p><strong>正向信号</strong></p>
+            ${listHtml(walletResearch.positive_signals)}
+            <p><strong>风险提示</strong></p>
+            ${listHtml(walletResearch.red_flags)}
           </div>
         </div>
       `;
@@ -922,6 +938,45 @@ def evidence_table_html(items: Any) -> str:
     )
 
 
+def wallet_research_html(value: Any) -> str:
+    if not isinstance(value, dict):
+        return '<p class="muted">未提供 Agent 钱包地址，本次不计入链上验证加分。</p>'
+    status = value.get("status") or "not_provided"
+    if status == "not_provided":
+        return '<p class="muted">未提供 Agent 钱包地址，本次不计入链上验证加分。</p>'
+    explorer_url = str(value.get("explorer_url") or "")
+    link = (
+        f'<p><a href="{h(explorer_url)}" target="_blank" rel="noreferrer">打开 OKLink X Layer 钱包页面</a></p>'
+        if explorer_url
+        else ""
+    )
+    return (
+        "<div class='memo-grid'>"
+        "<div class='memo-block'>"
+        "<h3>核验结论</h3>"
+        f"<p><strong>状态：</strong>{h(status)}</p>"
+        f"<p><strong>链：</strong>{h(value.get('chain', 'xlayer'))} / {h(value.get('chain_id', ''))}</p>"
+        f"<p><strong>地址：</strong>{h(value.get('address', ''))}</p>"
+        f"<p><strong>所有权支持：</strong>{'是' if value.get('verified_ownership') else '否'}</p>"
+        f"<p><strong>完整性分：</strong>{h(value.get('integrity_score', 0))}/10</p>"
+        f"{link}"
+        "</div>"
+        "<div class='memo-block'>"
+        "<h3>正向信号</h3>"
+        f"{items_html(value.get('positive_signals'))}"
+        "</div>"
+        "<div class='memo-block'>"
+        "<h3>风险提示</h3>"
+        f"{items_html(value.get('red_flags'))}"
+        "</div>"
+        "<div class='memo-block'>"
+        "<h3>说明</h3>"
+        f"{items_html(value.get('notes'))}"
+        "</div>"
+        "</div>"
+    )
+
+
 def confidence_label(value: Any) -> str:
     return {"high": "高", "medium": "中", "low": "低"}.get(str(value), "中")
 
@@ -1113,6 +1168,10 @@ def report_page(evaluation: dict[str, Any]) -> str:
       <section>
         <h2>真实产品与链上验证</h2>
         {items_html(report.get("verification_evidence"))}
+      </section>
+      <section>
+        <h2>Agent 钱包验证</h2>
+        {wallet_research_html(report.get("wallet_research"))}
       </section>
       <section>
         <h2>亮点</h2>

@@ -11,6 +11,7 @@ SYSTEM_PROMPT = """你是 NVC 的早期投资 memo 写作者，服务对象是 O
 
 硬原则：
 - 链上流水、销量、评分只能作为辅助证据，不得作为核心判断。
+- Agent 钱包验证是可选加分项。即使提供钱包，也必须区分钱包所有权、交易结构和真实业务证据；不能因为交易笔数多就判断为真实用户或真实收入。
 - 没有数据的早期项目也可以被评估，重点看问题强度、叙事质量、交付确定性和商业模式。
 - 如果项目只是“通用大模型套壳”，必须明确指出替代风险。
 - 如果项目方没有说明为什么用户不用 ChatGPT、豆包、Codex 或现有 Agent，必须扣分。
@@ -46,6 +47,7 @@ SYSTEM_PROMPT = """你是 NVC 的早期投资 memo 写作者，服务对象是 O
 - growth_strategy: 10，是否有可执行的获客、社区和传播路径。
 - defensibility: 10，数据、流程、渠道、社区或专业 know-how 壁垒。
 - verification_bonus: 20，产品链接、钱包、链上数据、收入、用户案例等真实证据加分。
+- wallet_research 如果存在，只能作为 verification_bonus 和置信度的辅助依据。看到 basic_check 时要说明它只是轻量核验；看到 ownership_supported 时可提高一点置信度；看到 invalid_address 或 red_flags 时要降低链上证据权重。
 
 投资候选建议：
 - 只有总分 >= 88 且核心风险可控时，raw_eligible_for_investment 才能为 true。
@@ -117,6 +119,7 @@ REPORT_SCHEMA_HINT = {
         "result_first_message": "string",
         "founder_next_action": "string",
         "shareable_text": "string",
+        "wallet_verification_line": "string",
     },
     "memo_sections": {
         "investment_decision": "string, 2-4 sentences, direct decision and why",
@@ -180,6 +183,24 @@ REPORT_SCHEMA_HINT = {
     "suggested_positioning": "string",
     "pricing_feedback": "string",
     "verification_evidence": ["string"],
+    "wallet_research": {
+        "status": "not_provided | invalid_address | basic_check | ownership_supported | insufficient_data | suspicious | high_risk",
+        "chain": "xlayer",
+        "chain_id": 196,
+        "address": "string",
+        "verified_ownership": False,
+        "explorer_url": "string",
+        "integrity_score": 0,
+        "metrics": {
+            "tx_count_observed": "number|null",
+            "unique_counterparties": "number|null",
+            "top_counterparty_share": "number|null",
+            "reciprocal_transfer_ratio": "number|null",
+        },
+        "positive_signals": ["string"],
+        "red_flags": ["string"],
+        "notes": ["string"],
+    },
     "reapply_conditions": ["string"],
     "contact_cta": "string",
     "data_used_as_supporting_evidence": ["string"],
@@ -194,7 +215,10 @@ INPUT_SCHEMA = {
         "product_url": "Live product URL, optional",
         "website": "Official website, optional",
         "social": "X/Telegram/Discord/community link, optional",
-        "wallet_address": "Wallet address, optional bonus evidence",
+        "wallet_address": "Agent wallet address on X Layer, optional bonus evidence",
+        "agent_wallet_address": "Agent wallet address used by the calling Agent Client, optional bonus evidence",
+        "wallet_chain": "Wallet chain, default xlayer",
+        "wallet_signature": "Optional signature proving ownership of the wallet address",
         "contact": "Founder contact, optional but useful for selected projects",
         "one_liner": "One sentence pitch",
         "target_user": "Who pays or repeatedly uses it",
