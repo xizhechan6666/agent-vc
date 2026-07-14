@@ -29,10 +29,10 @@ LLM_API_KEY=...
 LLM_BASE_URL=https://api.deepseek.com/chat/completions
 LLM_MODEL=deepseek-chat
 LLM_SSL_VERIFY=1
-SERVICE_FEE_USDT=10
+SERVICE_FEE_USDT=5
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
-X402_PRICE=$10.00
+X402_PRICE=$5.00
 X402_NETWORK=eip155:84532
 X402_SCHEME=exact
 INVESTMENT_WINDOW_SIZE=20
@@ -85,9 +85,9 @@ For an API service:
 ```json
 {
   "serviceName": "Agent VC Investment Diagnosis",
-  "serviceDescription": "① 对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断，输出 HTML/JSON 报告。\n② 用户需提供 Agent 名称、链接或 ID、目标用户、问题、方案、定价、traction、差异化和融资叙事。",
+  "serviceDescription": "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n③ 网页端只用于产品介绍，不免费生成完整研报，不参与入库和 100 USDT 支持筛选。",
   "serviceType": "A2MCP",
-  "fee": "10",
+  "fee": "5",
   "endpoint": "https://YOUR_DOMAIN/evaluate"
 }
 ```
@@ -99,10 +99,24 @@ The deployed `/evaluate` endpoint is protected by x402 when:
 ```bash
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
-X402_PRICE=$10.00
+X402_PRICE=$5.00
 X402_NETWORK=eip155:84532
 ```
 
 Unauthenticated callers receive HTTP 402. Clients pay, then replay the same request with the x402 payment signature header.
 
-The web demo at `/` calls `/demo/evaluate`, not `/evaluate`, so you can still test report generation in a browser. The A2MCP service endpoint remains `/evaluate`.
+The web page at `/` is only a product landing and paid Agent Client guide. By default, `/demo/evaluate` returns 403 so browser users cannot receive a free full report, enter the investment database, or consume quota. The A2MCP service endpoint remains `/evaluate`.
+
+Before registration or review, open:
+
+```text
+https://YOUR_DOMAIN/integration-check
+```
+
+It returns a no-secret status object confirming the paid endpoint, x402 status, report URL template, and Agent Client response contract.
+
+## Network Note
+
+The current x402 Python SDK has a default stablecoin asset for `eip155:84532`, so this repo uses it for the working one-shot payment gate. X Layer identity and Agent wallet verification still use X Layer (`eip155:196`) conceptually.
+
+Do not switch `X402_NETWORK` to `eip155:196` until the OKX x402 facilitator and supported stablecoin contract for X Layer are confirmed. If you switch early without an explicit supported asset configuration, the server may fail to produce a valid payment requirement.

@@ -10,7 +10,7 @@ The product flow is:
 4. Agent VC returns a structured investment diagnosis report.
 5. A hard quota gate decides whether the project enters the 100U investment candidate pool.
 
-The report engine is independent from payments and listing. x402 / **OKX Agent Payments Protocol** should wrap the `/evaluate` endpoint later as a payment gate, without changing the report logic.
+The report engine is independent from listing. In production, x402 / **OKX Agent Payments Protocol** wraps `/evaluate` as the paid Agent Client endpoint, while the browser page remains a landing and paid-call guide.
 
 ## Run Locally
 
@@ -79,7 +79,7 @@ export INVESTMENT_WINDOW_SIZE=20
 export INVESTMENT_MAX_PER_WINDOW=1
 ```
 
-Default rule: at most 1 investment candidate per 20 paid evaluations, and only if `total_score >= 85`.
+Default rule: at most 1 investment candidate per 20 paid evaluations, and only if `total_score >= 88`.
 
 ## Endpoints
 
@@ -87,12 +87,13 @@ Default rule: at most 1 investment candidate per 20 paid evaluations, and only i
 - `GET /schema`
 - `GET /a2mcp.json`
 - `GET /openapi.json`
+- `GET /integration-check`
 - `POST /interview`
 - `POST /evaluate`
 - `POST /demo/evaluate`
 
 When `X402_ENABLED=1`, `POST /evaluate` returns HTTP 402 until the caller supplies a valid x402 payment signature.
-The browser demo uses `POST /demo/evaluate` so the web UI remains usable while the A2MCP endpoint stays payment-gated.
+`POST /demo/evaluate` is disabled by default. The browser page must not provide a free full report, database entry, or investment quota decision.
 
 `POST /evaluate` input shape:
 
@@ -123,9 +124,8 @@ The browser demo uses `POST /demo/evaluate` so the web UI remains usable while t
 ## Next Build Steps
 
 1. Tune the prompt with 5-10 real Agent examples.
-2. Add x402 payment middleware around `/evaluate`.
-3. Deploy behind HTTPS.
-4. Register the public URL as an OKX.AI A2MCP service.
-5. Add a payout workflow later; never let the LLM trigger payouts directly.
+2. Register the public `/evaluate` URL as an OKX.AI A2MCP service.
+3. Add deeper indexed wallet transaction analysis when the X Layer data source is finalized.
+4. Add a payout workflow later; never let the LLM trigger payouts directly.
 
 Deployment notes are in `DEPLOY.md`.

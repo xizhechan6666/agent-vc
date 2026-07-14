@@ -803,6 +803,160 @@ def base_url(handler: BaseHTTPRequestHandler) -> str:
     return f"{proto}://{host}".rstrip("/")
 
 
+def evaluate_request_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["project"],
+        "additionalProperties": False,
+        "properties": {
+            "project": {
+                "type": "object",
+                "required": ["name", "one_liner", "target_user", "problem"],
+                "additionalProperties": True,
+                "properties": {
+                    "name": {"type": "string", "description": "Agent or project name."},
+                    "one_liner": {"type": "string", "description": "One sentence pitch."},
+                    "target_user": {"type": "string", "description": "Who pays or repeatedly uses it."},
+                    "problem": {"type": "string", "description": "Problem being solved."},
+                    "solution": {"type": "string", "description": "How the Agent solves it."},
+                    "pricing": {"type": "string", "description": "Current or proposed pricing."},
+                    "traction": {"type": "string", "description": "Users, revenue, reviews, usage, or testimonials."},
+                    "differentiation": {
+                        "type": "string",
+                        "description": "Why users choose this over ChatGPT, Doubao, Codex, or existing agents.",
+                    },
+                    "agent_url": {"type": "string", "description": "OKX.AI Agent URL or Agent ID."},
+                    "product_url": {"type": "string", "description": "Live product URL."},
+                    "website": {"type": "string", "description": "Official website."},
+                    "social": {"type": "string", "description": "X, Telegram, Discord, or community link."},
+                    "contact": {"type": "string", "description": "Founder contact for selected projects."},
+                    "agent_wallet_address": {
+                        "type": "string",
+                        "description": "Optional X Layer Agent wallet address, 0x-prefixed EVM address.",
+                    },
+                    "wallet_chain": {
+                        "type": "string",
+                        "description": "Wallet chain, default xlayer.",
+                        "default": "xlayer",
+                    },
+                    "wallet_signature": {
+                        "type": "string",
+                        "description": "Optional signature proving ownership of the wallet address.",
+                    },
+                    "onchain_evidence": {
+                        "type": "string",
+                        "description": "Optional on-chain or product verification evidence.",
+                    },
+                    "founder_pitch": {"type": "string", "description": "Why this deserves investment."},
+                    "risks": {"type": "string", "description": "Known risks or weak spots."},
+                },
+            },
+            "answers": {
+                "type": "array",
+                "description": "Optional answers to follow-up investor questions.",
+                "items": {
+                    "type": "object",
+                    "required": ["question", "answer"],
+                    "properties": {
+                        "question": {"type": "string"},
+                        "answer": {"type": "string"},
+                    },
+                },
+                "default": [],
+            },
+        },
+    }
+
+
+def evaluate_output_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["request_id", "report_token", "report_url", "investment_gate", "client_summary", "report"],
+        "properties": {
+            "request_id": {"type": "integer"},
+            "report_token": {"type": "string"},
+            "report_url": {"type": "string", "description": "Paid HTML report URL for this evaluation."},
+            "legacy_report_url": {"type": "string"},
+            "investment_gate": {"type": "object"},
+            "client_summary": {
+                "type": "object",
+                "properties": {
+                    "headline": {"type": "string"},
+                    "score_line": {"type": "string"},
+                    "result_first_message": {"type": "string"},
+                    "founder_next_action": {"type": "string"},
+                    "shareable_text": {"type": "string"},
+                    "wallet_verification_line": {"type": "string"},
+                    "report_url": {"type": "string"},
+                },
+            },
+            "sync": {"type": "object"},
+            "report": {"type": "object"},
+        },
+    }
+
+
+def bazaar_discovery_extension() -> dict[str, Any]:
+    input_schema = evaluate_request_schema()
+    output_schema = evaluate_output_schema()
+    return {
+        "info": {
+            "input": {
+                "type": "http",
+                "method": "POST",
+                "bodyType": "json",
+                "body": input_schema,
+            },
+            "output": {
+                "type": "object",
+                "format": "json",
+                "schema": output_schema,
+                "example": {
+                    "request_id": 1,
+                    "report_token": "example-token",
+                    "report_url": "https://example.com/agent/reports/{report_token}",
+                    "investment_gate": {
+                        "final_candidate": False,
+                        "award_amount_usdt": 0,
+                    },
+                    "client_summary": {
+                        "headline": "本轮暂未进入 100 USDT 早期投资支持名单。",
+                        "score_line": "总分 72/100，判断置信度：中。",
+                        "wallet_verification_line": "已提供 Agent 钱包和 OKLink 核验链接，但尚未完成所有权签名或 x402 付款方绑定。",
+                    },
+                    "report": {"total_score": 72},
+                },
+            },
+        },
+        "schema": {
+            "type": "object",
+            "required": ["input", "output"],
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "required": ["type", "method", "bodyType", "body"],
+                    "properties": {
+                        "type": {"const": "http"},
+                        "method": {"enum": ["POST"]},
+                        "bodyType": {"const": "json"},
+                        "body": {"type": "object"},
+                    },
+                },
+                "output": {
+                    "type": "object",
+                    "required": ["type", "format", "schema", "example"],
+                    "properties": {
+                        "type": {"type": "string"},
+                        "format": {"type": "string"},
+                        "schema": {"type": "object"},
+                        "example": output_schema,
+                    },
+                },
+            },
+        },
+    }
+
+
 def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     root = base_url(handler)
     return {
@@ -822,23 +976,7 @@ def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
                         "required": True,
                         "content": {
                             "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": ["project"],
-                                    "properties": {
-                                        "project": {"type": "object", "additionalProperties": {"type": "string"}},
-                                        "answers": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "question": {"type": "string"},
-                                                    "answer": {"type": "string"},
-                                                },
-                                            },
-                                        },
-                                    },
-                                }
+                                "schema": evaluate_request_schema()
                             }
                         },
                     },
@@ -859,6 +997,13 @@ def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
                     "summary": "Generate investor questions for an Agent project.",
                     "operationId": "generateInvestorQuestions",
                     "responses": {"200": {"description": "Question list."}},
+                }
+            },
+            "/integration-check": {
+                "get": {
+                    "summary": "Read-only integration status for Agent Client and x402 setup.",
+                    "operationId": "getIntegrationCheck",
+                    "responses": {"200": {"description": "Integration status without secrets."}},
                 }
             },
         },
@@ -883,10 +1028,13 @@ def a2mcp_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
             "serviceType": "A2MCP",
             "fee": os.getenv("SERVICE_FEE_USDT", "5"),
             "endpoint": f"{root}/evaluate",
+            "inputSchema": evaluate_request_schema(),
+            "outputSchema": evaluate_output_schema(),
         },
         "supportingEndpoints": {
             "webDemo": f"{root}/",
             "health": f"{root}/health",
+            "integrationCheck": f"{root}/integration-check",
             "openapi": f"{root}/openapi.json",
             "schema": f"{root}/schema",
         },
@@ -1237,6 +1385,45 @@ class AgentVCHandler(BaseHTTPRequestHandler):
             return
         if path == "/a2mcp.json":
             json_response(self, 200, a2mcp_document(self))
+            return
+        if path == "/integration-check":
+            json_response(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "service": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
+                    "public_base_url": base_url(self),
+                    "web_landing_url": f"{base_url(self)}/",
+                    "paid_agent_endpoint": f"{base_url(self)}/evaluate",
+                    "a2mcp_manifest_url": f"{base_url(self)}/a2mcp.json",
+                    "openapi_url": f"{base_url(self)}/openapi.json",
+                    "paid_report_url_template": f"{base_url(self)}/agent/reports/{{report_token}}",
+                    "browser_free_full_report_enabled": os.getenv("DEMO_EVALUATE_ENABLED", "0") == "1",
+                    "x402": {
+                        "enabled": os.getenv("X402_ENABLED", "0") == "1",
+                        "price": os.getenv("X402_PRICE", "$5.00"),
+                        "network": os.getenv("X402_NETWORK", "eip155:84532"),
+                        "scheme": os.getenv("X402_SCHEME", "exact"),
+                        "pay_to_configured": bool(os.getenv("X402_PAY_TO")),
+                    },
+                    "agent_client_contract": {
+                        "request_schema_present": True,
+                        "output_schema_present": True,
+                        "returns_report_url": True,
+                        "returns_chat_summary": True,
+                        "returns_result_first_message": True,
+                        "returns_founder_next_action": True,
+                        "returns_shareable_text": True,
+                    },
+                    "llm": {
+                        "configured": bool(
+                            os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
+                        ),
+                        "model": os.getenv("LLM_MODEL", "deepseek-chat"),
+                    },
+                },
+            )
             return
         if path.startswith("/reports/"):
             report_id_text = path.removeprefix("/reports/").strip("/")

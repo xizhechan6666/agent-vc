@@ -7,7 +7,7 @@ import secrets
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from agent_vc.evaluator import (
     apply_investment_gate,
@@ -20,7 +20,7 @@ from agent_vc.evaluator import (
 from agent_vc.prompt import INPUT_SCHEMA, REPORT_SCHEMA_HINT
 from agent_vc.store import connect, duplicate_today, get_evaluation, get_evaluation_by_token, save_evaluation
 from agent_vc.sync import sync_evaluation
-from app import INDEX_HTML, a2mcp_document, openapi_document, report_page
+from app import INDEX_HTML, a2mcp_document, bazaar_discovery_extension, openapi_document, report_page
 
 
 app = FastAPI(title="Agent VC API", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
@@ -64,6 +64,7 @@ def configure_x402() -> None:
             mime_type="application/json",
             service_name=os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
             tags=["agent-vc", "okx-ai", "diagnosis"],
+            extensions={"bazaar": bazaar_discovery_extension()},
         )
     }
 
@@ -110,8 +111,8 @@ async def index() -> str:
 
 
 @app.head("/")
-async def head_index() -> JSONResponse:
-    return JSONResponse(content=None, headers={"Content-Length": "0"})
+async def head_index() -> Response:
+    return Response(content=b"", media_type="text/html", headers={"Content-Length": "0"})
 
 
 @app.get("/health")
@@ -138,6 +139,41 @@ async def schema() -> dict[str, Any]:
         "endpoints": {
             "POST /interview": "Generate VC questions from project input.",
             "POST /evaluate": "Return VC report JSON and apply hard investment quota gate.",
+        },
+    }
+
+
+@app.get("/integration-check")
+async def integration_check(request: Request) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "service": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
+        "public_base_url": absolute_url(request, ""),
+        "web_landing_url": absolute_url(request, "/"),
+        "paid_agent_endpoint": absolute_url(request, "/evaluate"),
+        "a2mcp_manifest_url": absolute_url(request, "/a2mcp.json"),
+        "openapi_url": absolute_url(request, "/openapi.json"),
+        "paid_report_url_template": absolute_url(request, "/agent/reports/{report_token}"),
+        "browser_free_full_report_enabled": os.getenv("DEMO_EVALUATE_ENABLED", "0") == "1",
+        "x402": {
+            "enabled": x402_enabled(),
+            "price": os.getenv("X402_PRICE", "$5.00"),
+            "network": os.getenv("X402_NETWORK", "eip155:84532"),
+            "scheme": os.getenv("X402_SCHEME", "exact"),
+            "pay_to_configured": bool(os.getenv("X402_PAY_TO")),
+        },
+        "agent_client_contract": {
+            "request_schema_present": True,
+            "output_schema_present": True,
+            "returns_report_url": True,
+            "returns_chat_summary": True,
+            "returns_result_first_message": True,
+            "returns_founder_next_action": True,
+            "returns_shareable_text": True,
+        },
+        "llm": {
+            "configured": bool(os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")),
+            "model": os.getenv("LLM_MODEL", "deepseek-chat"),
         },
     }
 
