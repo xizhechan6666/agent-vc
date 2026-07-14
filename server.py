@@ -190,6 +190,7 @@ async def a2mcp_json(request: Request) -> dict[str, Any]:
     doc["supportingEndpoints"] = {
         "webDemo": absolute_url(request, "/"),
         "health": absolute_url(request, "/health"),
+        "integrationCheck": absolute_url(request, "/integration-check"),
         "openapi": absolute_url(request, "/openapi.json"),
         "schema": absolute_url(request, "/schema"),
     }
