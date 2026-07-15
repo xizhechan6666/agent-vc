@@ -25,6 +25,32 @@ def storage_backend() -> str:
     return "postgres" if database_url() else "sqlite"
 
 
+def storage_health() -> dict[str, Any]:
+    backend = storage_backend()
+    result: dict[str, Any] = {
+        "backend": backend,
+        "durable": backend == "postgres",
+        "database_url_configured": bool(database_url()),
+        "ok": False,
+    }
+    try:
+        with connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS c FROM evaluations").fetchone()
+            result["ok"] = True
+            result["evaluations_count"] = int(row["c"])
+    except Exception as exc:
+        result["error_type"] = exc.__class__.__name__
+        result["error"] = _safe_error(str(exc))
+    return result
+
+
+def _safe_error(message: str) -> str:
+    dsn = database_url()
+    if dsn:
+        message = message.replace(dsn, "[DATABASE_URL]")
+    return message[:500]
+
+
 def db_path() -> Path:
     return Path(os.getenv("AGENT_VC_DB", "data/agent_vc.sqlite3"))
 

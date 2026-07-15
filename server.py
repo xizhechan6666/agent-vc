@@ -31,7 +31,7 @@ from agent_vc.store import (
     get_evaluation_by_token,
     list_evaluations,
     save_evaluation,
-    storage_backend,
+    storage_health,
 )
 from agent_vc.sync import sync_evaluation
 from app import INDEX_HTML, a2mcp_document, bazaar_discovery_extension, openapi_document, report_page
@@ -427,11 +427,7 @@ async def integration_check(request: Request) -> dict[str, Any]:
         "paid_report_url_template": absolute_url(request, "/agent/reports/{report_token}"),
         "browser_free_full_report_enabled": os.getenv("DEMO_EVALUATE_ENABLED", "0") == "1",
         "owner_preview_enabled": bool(os.getenv("OWNER_ACCESS_TOKEN")),
-        "storage": {
-            "backend": storage_backend(),
-            "durable": storage_backend() == "postgres",
-            "database_url_configured": bool(os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")),
-        },
+        "storage": storage_health(),
         "x402": {
             "enabled": x402_enabled(),
             "mode": x402_mode(),
