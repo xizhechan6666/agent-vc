@@ -6,6 +6,9 @@ __pycache__/
 .env
 .env.*
 !.env.example
+.agents/
+.mcp.json
+skills-lock.json
 
 data/
 *.sqlite
