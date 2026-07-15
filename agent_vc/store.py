@@ -47,6 +47,7 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "duplicate_today": "ALTER TABLE evaluations ADD COLUMN duplicate_today INTEGER NOT NULL DEFAULT 0",
         "contact_hint": "ALTER TABLE evaluations ADD COLUMN contact_hint TEXT",
         "report_token": "ALTER TABLE evaluations ADD COLUMN report_token TEXT",
+        "owner_preview": "ALTER TABLE evaluations ADD COLUMN owner_preview INTEGER NOT NULL DEFAULT 0",
     }
     for column, statement in migrations.items():
         if column not in existing:
@@ -56,22 +57,17 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
 def quota_preview(conn: sqlite3.Connection) -> dict[str, int]:
     window_size = int(os.getenv("INVESTMENT_WINDOW_SIZE", "20"))
     max_per_window = int(os.getenv("INVESTMENT_MAX_PER_WINDOW", "1"))
-    total_before = conn.execute("SELECT COUNT(*) AS c FROM evaluations").fetchone()["c"]
+    total_before = conn.execute("SELECT COUNT(*) AS c FROM evaluations WHERE owner_preview = 0").fetchone()["c"]
     batch_index = total_before // window_size
-    batch_start = batch_index * window_size
     candidates_in_batch = conn.execute(
         """
         SELECT COUNT(*) AS c
         FROM evaluations
-        WHERE id > (
-            SELECT COALESCE(MAX(id), 0)
-            FROM evaluations
-            WHERE id <= ?
-        )
-        AND batch_index = ?
+        WHERE batch_index = ?
         AND final_candidate = 1
+        AND owner_preview = 0
         """,
-        (batch_start, batch_index),
+        (batch_index,),
     ).fetchone()["c"]
     return {
         "window_size": window_size,
@@ -93,6 +89,7 @@ def duplicate_today(conn: sqlite3.Connection, *, project_fingerprint: str, submi
         SELECT COUNT(*) AS c
         FROM evaluations
         WHERE date(created_at) = ?
+          AND owner_preview = 0
           AND (
             (? != '' AND project_fingerprint = ?)
             OR (? != '' AND submitter_key = ?)
@@ -114,6 +111,7 @@ def save_evaluation(
     duplicate: bool = False,
     contact_hint: str = "",
     report_token: str = "",
+    owner_preview: bool = False,
 ) -> int:
     cursor = conn.execute(
         """
@@ -129,9 +127,10 @@ def save_evaluation(
             duplicate_today,
             contact_hint,
             report_token,
+            owner_preview,
             report_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             project_name,
@@ -145,6 +144,7 @@ def save_evaluation(
             1 if duplicate else 0,
             contact_hint,
             report_token,
+            1 if owner_preview else 0,
             json.dumps(report, ensure_ascii=False),
         ),
     )
@@ -157,7 +157,8 @@ def get_evaluation(conn: sqlite3.Connection, evaluation_id: int) -> dict[str, An
         """
         SELECT id, created_at, project_name, total_score, recommendation,
                raw_eligible, final_candidate, batch_index, project_fingerprint,
-               submitter_key, duplicate_today, contact_hint, report_token, report_json
+               submitter_key, duplicate_today, contact_hint, report_token,
+               owner_preview, report_json
         FROM evaluations
         WHERE id = ?
         """,
@@ -179,6 +180,7 @@ def get_evaluation(conn: sqlite3.Connection, evaluation_id: int) -> dict[str, An
         "duplicate_today": bool(row["duplicate_today"]),
         "contact_hint": row["contact_hint"],
         "report_token": row["report_token"],
+        "owner_preview": bool(row["owner_preview"]),
         "report_url_kind": "legacy_id",
         "report": json.loads(row["report_json"]),
     }
@@ -189,7 +191,8 @@ def get_evaluation_by_token(conn: sqlite3.Connection, report_token: str) -> dict
         """
         SELECT id, created_at, project_name, total_score, recommendation,
                raw_eligible, final_candidate, batch_index, project_fingerprint,
-               submitter_key, duplicate_today, contact_hint, report_token, report_json
+               submitter_key, duplicate_today, contact_hint, report_token,
+               owner_preview, report_json
         FROM evaluations
         WHERE report_token = ?
         """,
@@ -211,6 +214,7 @@ def get_evaluation_by_token(conn: sqlite3.Connection, report_token: str) -> dict
         "duplicate_today": bool(row["duplicate_today"]),
         "contact_hint": row["contact_hint"],
         "report_token": row["report_token"],
+        "owner_preview": bool(row["owner_preview"]),
         "report_url_kind": "agent_token",
         "report": json.loads(row["report_json"]),
     }

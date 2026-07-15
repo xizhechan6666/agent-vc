@@ -146,9 +146,28 @@ X402_ASSET_VERSION=1
 X402_ASSET_DECIMALS=6
 X402_SCHEME=exact
 DEMO_EVALUATE_ENABLED=0
+OWNER_ACCESS_TOKEN=...
 ```
 
 Keep API keys in environment variables only.
+
+## Owner Preview Without x402
+
+Owner preview is for development and private testing only. It is disabled unless `OWNER_ACCESS_TOKEN` exists in the environment.
+
+```bash
+curl -s https://agent-vc-4a3m.onrender.com/owner/simulate \
+  -H 'Content-Type: application/json' \
+  -H "X-Agent-VC-Owner-Token: $OWNER_ACCESS_TOKEN" \
+  --data @sample_request.json
+```
+
+Behavior:
+
+- Missing or wrong token returns `401`.
+- No x402 payment is required.
+- Generated reports are saved so `report_url` works.
+- Rows are marked `owner_preview = 1` and excluded from duplicate checks and investment quota windows.
 
 ## Verification Commands
 

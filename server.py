@@ -317,6 +317,15 @@ def request_adapter(request: Request) -> Any:
     return Adapter()
 
 
+def require_owner(request: Request) -> None:
+    expected = os.getenv("OWNER_ACCESS_TOKEN")
+    provided = request.headers.get("X-Agent-VC-Owner-Token") or request.query_params.get("owner_token")
+    if not expected:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not provided or not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="Owner token required")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     return INDEX_HTML
@@ -367,6 +376,7 @@ async def integration_check(request: Request) -> dict[str, Any]:
         "openapi_url": absolute_url(request, "/openapi.json"),
         "paid_report_url_template": absolute_url(request, "/agent/reports/{report_token}"),
         "browser_free_full_report_enabled": os.getenv("DEMO_EVALUATE_ENABLED", "0") == "1",
+        "owner_preview_enabled": bool(os.getenv("OWNER_ACCESS_TOKEN")),
         "x402": {
             "enabled": x402_enabled(),
             "mode": x402_mode(),
@@ -432,7 +442,7 @@ async def agent_report(report_token: str) -> str:
     return report_page(evaluation)
 
 
-def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: bool = False) -> dict[str, Any]:
     project = payload.get("project")
     answers = payload.get("answers", [])
     if not isinstance(project, dict):
@@ -463,6 +473,7 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
             duplicate=duplicate,
             contact_hint=contact_hint,
             report_token=report_token,
+            owner_preview=owner_preview,
         )
     sync_status = sync_evaluation(
         {
@@ -476,6 +487,7 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
             "investment_gate": gate,
             "client_summary": client_summary,
             "report": report,
+            "owner_preview": owner_preview,
         }
     )
 
@@ -487,6 +499,7 @@ def run_evaluation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         "investment_gate": gate,
         "client_summary": client_summary,
         "sync": sync_status,
+        "owner_preview": owner_preview,
         "report": report,
     }
 
@@ -499,9 +512,101 @@ async def interview(payload: dict[str, Any]) -> dict[str, Any]:
     return generate_interview(project)
 
 
+@app.post("/owner/interview")
+async def owner_interview(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    require_owner(request)
+    project = payload.get("project", payload)
+    if not isinstance(project, dict):
+        raise HTTPException(status_code=400, detail="invalid_project")
+    questions = generate_interview(project)
+    return {
+        "owner_preview": True,
+        "payment_required": False,
+        "next_step": "answer_questions",
+        "questions": questions.get("questions", []),
+        "agent_client_style_message": (
+            "我会先追问 3 个投资人最关心的问题。你回答后，我会生成完整评分、投资结论、"
+            "改进建议和 HTML 报告链接。"
+        ),
+    }
+
+
 @app.post("/evaluate")
 async def evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     return run_evaluation(payload, request)
+
+
+@app.post("/owner/evaluate")
+async def owner_evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    require_owner(request)
+    result = run_evaluation(payload, request, owner_preview=True)
+    result["owner_note"] = "Owner preview call: x402 skipped, saved for report preview, excluded from public quota counting."
+    return result
+
+
+@app.post("/owner/simulate")
+async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    require_owner(request)
+    project = payload.get("project")
+    answers = payload.get("answers", [])
+    if not isinstance(project, dict):
+        raise HTTPException(status_code=400, detail="Expected object field: project")
+    if not isinstance(answers, list):
+        raise HTTPException(status_code=400, detail="Expected array field: answers")
+
+    questions = generate_interview(project).get("questions", [])
+    conversation: list[dict[str, Any]] = [
+        {
+            "role": "user",
+            "content": "I would like to use Agent VC to evaluate my Agent project.",
+        },
+        {
+            "role": "agent",
+            "content": (
+                "可以。我需要先了解项目名称、一句话介绍、目标用户和核心问题。"
+                "如果你愿意，也可以补充产品链接、Agent 钱包、traction 和联系方式。"
+            ),
+        },
+        {"role": "user", "content": project},
+        {
+            "role": "agent",
+            "content": "我会先补充 3 个投资人追问，再生成最终投资评估。",
+            "questions": questions,
+        },
+    ]
+
+    if not answers:
+        return {
+            "owner_preview": True,
+            "payment_required": False,
+            "stage": "questions_ready",
+            "next_step": "POST the same payload with answers[] to /owner/simulate or /owner/evaluate.",
+            "conversation": conversation,
+            "questions": questions,
+        }
+
+    result = run_evaluation(payload, request, owner_preview=True)
+    summary = result.get("client_summary", {})
+    conversation.extend(
+        [
+            {"role": "user", "content": answers},
+            {
+                "role": "agent",
+                "content": summary.get("chat_summary") or summary.get("headline"),
+                "result_first_message": summary.get("result_first_message"),
+                "score_line": summary.get("score_line"),
+                "founder_next_action": summary.get("founder_next_action"),
+                "report_url": result.get("report_url"),
+            },
+        ]
+    )
+    return {
+        "owner_preview": True,
+        "payment_required": False,
+        "stage": "report_ready",
+        "conversation": conversation,
+        "result": result,
+    }
 
 
 @app.post("/demo/evaluate")

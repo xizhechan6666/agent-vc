@@ -35,6 +35,7 @@ INVESTMENT_MAX_PER_WINDOW=1
 INVESTMENT_MINIMUM_SCORE=88
 
 DEMO_EVALUATE_ENABLED=0
+OWNER_ACCESS_TOKEN=<private random token, Render env only>
 
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
@@ -49,7 +50,7 @@ X402_SCHEME=exact
 X402_MAX_TIMEOUT_SECONDS=300
 ```
 
-Keep API keys in environment variables only. On Render, `LLM_API_KEY`, `DB_SYNC_WEBHOOK_URL`, and `DB_SYNC_SECRET` are marked `sync: false`.
+Keep API keys and owner tokens in environment variables only. On Render, `LLM_API_KEY`, `DB_SYNC_WEBHOOK_URL`, `DB_SYNC_SECRET`, and `OWNER_ACCESS_TOKEN` are marked `sync: false`.
 
 ## Render Deployment
 
@@ -121,8 +122,9 @@ It can:
 Production boundaries:
 
 - Complete investment reports are generated only through the paid Agent Client endpoint.
-- Investment database writes happen only after a valid paid `/evaluate` call.
-- 100 USDT support quota decisions happen only in the paid endpoint.
+- Production investment database writes happen only after a valid paid `/evaluate` call.
+- Owner preview can generate private test reports through `/owner/*`, but those rows are marked as preview and excluded from public quota counting.
+- 100 USDT support quota decisions for users happen only in the paid endpoint.
 - x402 remains the required payment gate for production report generation.
 
 `/demo/evaluate` is restricted by default and returns 403.

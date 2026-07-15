@@ -50,6 +50,14 @@ POST /evaluate
 
 `POST /demo/evaluate` is restricted by default and returns 403 unless explicitly enabled for controlled internal testing.
 
+Owner-only preview endpoints are available only when `OWNER_ACCESS_TOKEN` is set. They skip x402 for development, require the `X-Agent-VC-Owner-Token` header, and are excluded from public quota counting:
+
+```text
+POST /owner/interview
+POST /owner/evaluate
+POST /owner/simulate
+```
+
 ## Public Endpoints
 
 ```text
@@ -218,9 +226,25 @@ X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
 X402_ASSET_NAME=USDT
 X402_SCHEME=exact
 DEMO_EVALUATE_ENABLED=0
+OWNER_ACCESS_TOKEN=use-a-private-random-token-in-render
 ```
 
 Keep API keys in environment variables only.
+
+## Owner Preview
+
+Use owner preview when you need to simulate the Agent Client interaction without paying x402 during development.
+
+```bash
+curl -s https://agent-vc-4a3m.onrender.com/owner/simulate \
+  -H 'Content-Type: application/json' \
+  -H "X-Agent-VC-Owner-Token: $OWNER_ACCESS_TOKEN" \
+  --data @sample_request.json
+```
+
+If `answers` is empty, `/owner/simulate` returns the follow-up questions and a conversation-style preview. If `answers` is present, it returns the final JSON, `client_summary`, and tokenized HTML `report_url`.
+
+Do not commit `OWNER_ACCESS_TOKEN`. Set it only in the deployment environment.
 
 ## Verification
 

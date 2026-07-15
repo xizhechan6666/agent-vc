@@ -51,5 +51,7 @@ services:
         sync: false
       - key: DEMO_EVALUATE_ENABLED
         value: 0
+      - key: OWNER_ACCESS_TOKEN
+        sync: false
       - key: X402_ENABLED
         value: 1
