@@ -196,6 +196,37 @@ DB_SYNC_SECRET=<private shared secret>
 
 The sync is best-effort. Report generation still succeeds if the external table is temporarily unavailable.
 
+## Durable Report Storage
+
+Use Postgres in production. Local SQLite is acceptable for development only; it can be lost when a free Render instance restarts or when the container is replaced. If SQLite is lost, old `/agent/reports/{report_token}` links return `Report not found`.
+
+Set these Render environment variables:
+
+```bash
+DATABASE_URL=postgresql://...
+DATABASE_SSLMODE=require
+```
+
+Supabase and Render Postgres both work. Keep `DATABASE_URL` private and do not commit it.
+
+Confirm the deployed service is using durable storage:
+
+```bash
+curl -s https://agent-vc-4a3m.onrender.com/integration-check
+```
+
+The response should include:
+
+```json
+"storage": {
+  "backend": "postgres",
+  "durable": true,
+  "database_url_configured": true
+}
+```
+
+If it still shows `sqlite`, new reports can still disappear after redeploys.
+
 ## Verification Commands
 
 Syntax and schema:

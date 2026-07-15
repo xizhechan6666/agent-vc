@@ -273,6 +273,41 @@ curl -L "https://agent-vc-4a3m.onrender.com/owner/evaluations.csv?limit=500&owne
 
 For a permanent online table, set `DB_SYNC_WEBHOOK_URL` to your own Google Sheets, Airtable, Supabase, or Notion webhook endpoint. If `DB_SYNC_SECRET` is set, the app sends `Authorization: Bearer <secret>`.
 
+### Durable Report Storage
+
+For production, configure a Postgres database. Without it, the app falls back to local SQLite, which can disappear when a free Render instance restarts or redeploys.
+
+Recommended setup:
+
+1. Create a Supabase project or Render Postgres database.
+2. Copy its Postgres connection string.
+3. Set these Render environment variables:
+
+```bash
+DATABASE_URL=postgresql://...
+DATABASE_SSLMODE=require
+```
+
+After deployment, verify:
+
+```bash
+curl -s https://agent-vc-4a3m.onrender.com/integration-check
+```
+
+Expected storage section:
+
+```json
+{
+  "storage": {
+    "backend": "postgres",
+    "durable": true,
+    "database_url_configured": true
+  }
+}
+```
+
+When Postgres is enabled, `report_token`, report JSON, user submissions, answers, payer wallet, and dashboard exports survive Render restarts and redeploys.
+
 ## Verification
 
 ```bash
