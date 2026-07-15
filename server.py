@@ -64,6 +64,16 @@ def x402_price_amount() -> str:
     return str(int(value * (Decimal(10) ** decimals)))
 
 
+def x402_price_display() -> str:
+    configured = os.getenv("X402_SDK_PRICE")
+    if configured:
+        return configured
+
+    price = os.getenv("X402_PRICE", "5")
+    normalized = price.replace("$", "").replace("USDT", "").replace("USDC", "").strip()
+    return f"${normalized}"
+
+
 def x402_network() -> str:
     return os.getenv("X402_NETWORK", "eip155:196")
 
@@ -250,58 +260,61 @@ def configure_x402() -> None:
     if not x402_enabled() or x402_mode() != "sdk":
         return
 
-    pay_to = os.getenv("X402_PAY_TO")
+    pay_to = os.getenv("X402_PAY_TO") or os.getenv("PAY_TO_ADDRESS")
     if not pay_to:
-        raise RuntimeError("X402_ENABLED=1 requires X402_PAY_TO")
+        raise RuntimeError("X402_ENABLED=1 requires X402_PAY_TO or PAY_TO_ADDRESS")
+
+    missing_auth = [
+        name
+        for name in ("OKX_API_KEY", "OKX_SECRET_KEY", "OKX_PASSPHRASE")
+        if not os.getenv(name)
+    ]
+    if missing_auth:
+        raise RuntimeError(f"X402_MODE=sdk requires official OKX Payment SDK credentials: {', '.join(missing_auth)}")
 
     try:
-        from x402.http.facilitator_client import FacilitatorConfig, HTTPFacilitatorClient
-        from x402.http.middleware.fastapi import payment_middleware
-        from x402.http.types import PaymentOption, RouteConfig
-        from x402.mechanisms.evm.exact import ExactEvmServerScheme
-        from x402.schemas import AssetAmount
+        from x402.http import OKXAuthConfig, OKXFacilitatorClient, OKXFacilitatorConfig, PaymentOption
+        from x402.http.middleware.fastapi import PaymentMiddlewareASGI
+        from x402.http.types import RouteConfig
+        from x402.mechanisms.evm.exact.server import ExactEvmScheme
         from x402.server import x402ResourceServer
     except ModuleNotFoundError as exc:
         raise RuntimeError("Install dependencies with `pip install -r requirements.txt`") from exc
 
     network = x402_network()
-    scheme = os.getenv("X402_SCHEME", "exact")
-    price = AssetAmount(
-        amount=x402_price_amount(),
-        asset=x402_asset(),
-        extra={"name": x402_asset_name(), "version": x402_asset_version()},
+    facilitator = OKXFacilitatorClient(
+        OKXFacilitatorConfig(
+            auth=OKXAuthConfig(
+                api_key=os.getenv("OKX_API_KEY", ""),
+                secret_key=os.getenv("OKX_SECRET_KEY", ""),
+                passphrase=os.getenv("OKX_PASSPHRASE", ""),
+            ),
+            base_url=os.getenv("OKX_BASE_URL", "https://web3.okx.com"),
+            sync_settle=os.getenv("X402_SYNC_SETTLE", "1") == "1",
+        )
     )
+
+    resource_server = x402ResourceServer(facilitator)
+    resource_server.register(network, ExactEvmScheme())
 
     routes = {
         "POST /evaluate": RouteConfig(
-            accepts=PaymentOption(
-                scheme=scheme,
-                pay_to=pay_to,
-                price=price,
-                network=network,
-                max_timeout_seconds=int(os.getenv("X402_MAX_TIMEOUT_SECONDS", "300")),
-            ),
+            accepts=[
+                PaymentOption(
+                    scheme=os.getenv("X402_SCHEME", "exact"),
+                    price=x402_price_display(),
+                    network=network,
+                    pay_to=pay_to,
+                    max_timeout_seconds=int(os.getenv("X402_MAX_TIMEOUT_SECONDS", "300")),
+                )
+            ],
             description="Agent VC investment diagnosis report for OKX.AI Agent projects.",
             mime_type="application/json",
-            service_name=os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
-            tags=["agent-vc", "okx-ai", "diagnosis"],
             extensions={"bazaar": bazaar_discovery_extension()},
         )
     }
 
-    facilitator = HTTPFacilitatorClient(
-        FacilitatorConfig(url=os.getenv("X402_FACILITATOR_URL", "https://x402.org/facilitator"))
-    )
-    resource_server = x402ResourceServer(facilitator)
-    resource_server.register(network, ExactEvmServerScheme())
-
-    app.middleware("http")(
-        payment_middleware(
-            routes=routes,
-            server=resource_server,
-            sync_facilitator_on_start=os.getenv("X402_SYNC_FACILITATOR_ON_START", "1") == "1",
-        )
-    )
+    app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=resource_server)
 
 
 configure_okx_x402()

@@ -1,4 +1,5 @@
-x402[fastapi,evm,extensions]>=0.6.0
+okxweb3-app-x402>=0.1.1
+x402[evm]>=2.15.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 psycopg[binary]>=3.2.0

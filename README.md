@@ -99,7 +99,7 @@ It includes `inputSchema` and `outputSchema` so a compatible Agent Client can co
 
 ## x402 Payment
 
-Current working production configuration:
+Current working production configuration keeps the already-tested lightweight OKX-compatible x402 v2 path:
 
 ```bash
 X402_ENABLED=1
@@ -114,6 +114,24 @@ X402_SCHEME=exact
 Unauthenticated calls to `/evaluate` return HTTP 402 with a `PAYMENT-REQUIRED` header. The header contains x402 v2 requirements and Bazaar discovery metadata.
 
 The service challenge is configured for X Layer (`eip155:196`) and the OKX-supported USDT contract used by A2MCP service registration. The amount is `5000000`, representing 5 units with 6 decimals. `X402_MODE=okx` returns the challenge immediately and verifies the replayed `PAYMENT-SIGNATURE` locally so OKX Agent Client calls do not depend on the generic x402.org facilitator.
+
+The official OKX Payment SDK path is also wired and can be enabled after the OKX seller credentials are configured:
+
+```bash
+X402_ENABLED=1
+X402_MODE=sdk
+X402_PRICE=5
+X402_NETWORK=eip155:196
+X402_SCHEME=exact
+X402_PAY_TO=0x...
+OKX_API_KEY=...
+OKX_SECRET_KEY=...
+OKX_PASSPHRASE=...
+OKX_BASE_URL=https://web3.okx.com
+X402_SYNC_SETTLE=1
+```
+
+In `sdk` mode, the FastAPI app uses OKX's Seller SDK (`okxweb3-app-x402`) with `OKXFacilitatorClient`, `PaymentMiddlewareASGI`, and `ExactEvmScheme`. This is the preferred production path for official x402 v2 wrapping, payment verification, and synchronous settlement. Do not switch Render to `X402_MODE=sdk` until the three OKX API credentials are present, otherwise startup intentionally fails.
 
 ## Response Contract
 
