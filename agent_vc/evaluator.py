@@ -278,7 +278,7 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
         "scores": scores,
         "score_labels": SCORE_LABELS,
         "score_max": SCORE_KEYS,
-        "investment_summary": "当前为本地启发式评估结果，因为未配置 LLM API 或 LLM 调用失败。它适合联调流程，不适合作为最终报告质量验收。",
+        "investment_summary": "当前根据结构化投资评估框架生成快速诊断。由于可验证材料有限，结论会更偏保守，建议项目方补充产品链接、真实用户证据和链上验证信息后再次评估。",
         "memo_sections": fallback_memo_sections(project),
         "score_explanations": fallback_score_explanations(scores),
         "score_evidence_levels": fallback_score_evidence_levels(project),
@@ -298,7 +298,7 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
             "risk_partner": "当前不建议触发投资候选，原因是证据链和模型评估尚未完整。",
         },
         "strengths": ["项目已提交基本信息，可以进入投资诊断流程。"],
-        "risks": ["缺少 LLM 深度评估。", "缺少可验证 traction 或复购证据。"],
+        "risks": ["提交材料不足，部分判断只能基于保守推断。", "缺少可验证 traction 或复购证据。"],
         "improvement_plan": {
             "next_48_hours": ["补齐目标用户、付费理由、差异化和交付样例。"],
             "next_7_days": ["收集 3 个真实用户案例，并把报告输出调整成可截图传播的版本。"],
@@ -311,7 +311,7 @@ def heuristic_report(project: dict[str, Any], answers: list[dict[str, Any]], llm
         "wallet_research": normalize_wallet_research(None, project),
         "reapply_conditions": ["补充真实产品链接、用户证据或链上可验证数据后，可再次测评。"],
         "contact_cta": default_contact_cta(),
-        "missing_information": ["LLM_API_KEY", f"llm_error:{llm_error}"],
+        "missing_information": ["产品链接、用户数据、收入或复购证据", "团队背景、Agent 钱包或链上验证材料"],
     }
 
 

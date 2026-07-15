@@ -35,7 +35,7 @@ def _extract_json(text: str) -> dict[str, Any]:
     return value
 
 
-def call_json(system_prompt: str, user_payload: dict[str, Any], *, max_retries: int = 2) -> dict[str, Any]:
+def call_json(system_prompt: str, user_payload: dict[str, Any], *, max_retries: int | None = None) -> dict[str, Any]:
     """Call an OpenAI-compatible chat completions endpoint and return JSON."""
 
     api_key = os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
@@ -44,7 +44,9 @@ def call_json(system_prompt: str, user_payload: dict[str, Any], *, max_retries: 
 
     base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/chat/completions")
     model = os.getenv("LLM_MODEL", "deepseek-chat")
-    timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+    timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "12"))
+    if max_retries is None:
+        max_retries = int(os.getenv("LLM_MAX_RETRIES", "0"))
 
     body = {
         "model": model,

@@ -364,6 +364,46 @@ async def schema() -> dict[str, Any]:
     }
 
 
+@app.get("/evaluate")
+async def evaluate_probe(request: Request) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "service": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
+        "service_type": "A2MCP",
+        "method": "POST",
+        "endpoint": absolute_url(request, "/evaluate"),
+        "payment_required_for_post": x402_enabled(),
+        "x402": {
+            "enabled": x402_enabled(),
+            "network": x402_network(),
+            "asset": x402_asset(),
+            "amount": x402_price_amount() if x402_enabled() else None,
+            "pay_to_configured": bool(os.getenv("X402_PAY_TO")),
+        },
+        "request_schema": INPUT_SCHEMA,
+        "note": "Send POST /evaluate with a project object. Paid calls receive HTTP 402 first and return a report after payment replay.",
+    }
+
+
+@app.head("/evaluate")
+async def head_evaluate() -> Response:
+    return Response(content=b"", media_type="application/json", headers={"Content-Length": "0"})
+
+
+@app.options("/evaluate")
+async def options_evaluate() -> Response:
+    return Response(
+        status_code=204,
+        headers={
+            "Allow": "GET, HEAD, OPTIONS, POST",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS, POST",
+            "Access-Control-Allow-Headers": "Content-Type, X-PAYMENT, PAYMENT-SIGNATURE",
+            "Access-Control-Max-Age": "600",
+        },
+    )
+
+
 @app.get("/integration-check")
 async def integration_check(request: Request) -> dict[str, Any]:
     return {
