@@ -567,6 +567,259 @@ def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: 
     }
 
 
+@app.get("/owner/dashboard", response_class=HTMLResponse)
+async def owner_dashboard() -> str:
+    return """
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent VC Owner Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f4ef;
+      --panel: #ffffff;
+      --line: #d8d2c5;
+      --text: #202124;
+      --muted: #6f6a61;
+      --accent: #9b6b2f;
+      --ok: #1f7a4d;
+      --warn: #a65d12;
+      --bad: #9b2f2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      background: #fffaf0;
+      padding: 24px;
+    }
+    main { padding: 24px; max-width: 1440px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: 0; }
+    p { margin: 0; color: var(--muted); }
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 120px auto auto;
+      gap: 10px;
+      margin: 18px 0;
+      align-items: center;
+    }
+    input, button {
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font: inherit;
+    }
+    input { padding: 0 12px; background: var(--panel); color: var(--text); }
+    button {
+      padding: 0 14px;
+      background: var(--text);
+      color: white;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.secondary { background: var(--panel); color: var(--text); }
+    .status { min-height: 24px; margin-bottom: 14px; color: var(--muted); }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 1180px; }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+    }
+    th { background: #fbf7ef; color: #3c3832; position: sticky; top: 0; }
+    tr:last-child td { border-bottom: 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fbf7ef;
+      white-space: nowrap;
+    }
+    .candidate { color: var(--ok); border-color: #9ac4ad; background: #edf7f1; }
+    .duplicate { color: var(--warn); border-color: #d9b17b; background: #fff5e7; }
+    .preview { color: var(--muted); }
+    details { max-width: 360px; }
+    pre {
+      max-height: 280px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: 10px;
+      border-radius: 6px;
+      background: #f7f4ee;
+      border: 1px solid var(--line);
+    }
+    @media (max-width: 760px) {
+      header, main { padding: 16px; }
+      .controls { grid-template-columns: 1fr; }
+      table { min-width: 980px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Agent VC 后台</h1>
+    <p>查看付费 Agent Client 调用、owner preview、投资候选、联系方式、付款钱包和报告链接。</p>
+  </header>
+  <main>
+    <div class="controls">
+      <input id="token" type="password" placeholder="输入 OWNER_ACCESS_TOKEN" autocomplete="off" />
+      <input id="limit" type="number" min="1" max="500" value="100" />
+      <button id="load">加载记录</button>
+      <button id="csv" class="secondary">导出 CSV</button>
+    </div>
+    <div id="status" class="status">Token 只保存在当前浏览器 localStorage，不会写进页面或数据库。</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>时间</th>
+            <th>项目</th>
+            <th>分数</th>
+            <th>投资状态</th>
+            <th>联系方式</th>
+            <th>付款钱包</th>
+            <th>来源</th>
+            <th>报告</th>
+            <th>提交内容</th>
+            <th>追问回答</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+  <script>
+    const tokenInput = document.querySelector('#token');
+    const limitInput = document.querySelector('#limit');
+    const statusEl = document.querySelector('#status');
+    const rowsEl = document.querySelector('#rows');
+    tokenInput.value = localStorage.getItem('agent_vc_owner_token') || '';
+
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+    }
+
+    function pill(text, cls = '') {
+      return `<span class="pill ${cls}">${esc(text)}</span>`;
+    }
+
+    function projectLine(project) {
+      if (!project || typeof project !== 'object') return '';
+      return project.one_liner || project.summary || project.problem || '';
+    }
+
+    function renderRows(items) {
+      if (!items.length) {
+        rowsEl.innerHTML = '<tr><td colspan="11">暂无记录。</td></tr>';
+        return;
+      }
+      rowsEl.innerHTML = items.map((row) => {
+        const project = row.project && typeof row.project === 'object' ? row.project : {};
+        const answers = Array.isArray(row.answers) ? row.answers : [];
+        const candidate = row.final_candidate ? pill('候选', 'candidate') : pill('未入选');
+        const duplicate = row.duplicate_today ? pill('重复', 'duplicate') : '';
+        const source = row.source === 'owner_preview' ? pill('owner preview', 'preview') : pill(row.source || 'agent client');
+        const report = row.report_url ? `<a href="${esc(row.report_url)}" target="_blank" rel="noreferrer">打开报告</a>` : '';
+        return `
+          <tr>
+            <td>${esc(row.id)}</td>
+            <td>${esc(row.created_at)}</td>
+            <td><strong>${esc(row.project_name)}</strong><br><span>${esc(projectLine(project))}</span></td>
+            <td>${esc(row.total_score)}/100<br>${esc(row.recommendation || '')}</td>
+            <td>${candidate} ${duplicate}</td>
+            <td>${esc(row.contact_hint || project.contact || project.email || '')}</td>
+            <td>${esc(row.payer_wallet || '')}</td>
+            <td>${source}</td>
+            <td>${report}</td>
+            <td><details><summary>查看</summary><pre>${esc(JSON.stringify(project, null, 2))}</pre></details></td>
+            <td><details><summary>${answers.length} 条</summary><pre>${esc(JSON.stringify(answers, null, 2))}</pre></details></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadRows() {
+      const token = tokenInput.value.trim();
+      if (!token) {
+        statusEl.textContent = '请先输入 OWNER_ACCESS_TOKEN。';
+        return;
+      }
+      localStorage.setItem('agent_vc_owner_token', token);
+      statusEl.textContent = '正在加载...';
+      rowsEl.innerHTML = '';
+      const limit = Math.max(1, Math.min(Number(limitInput.value || 100), 500));
+      const res = await fetch(`/owner/evaluations?limit=${limit}`, {
+        headers: { 'X-Agent-VC-Owner-Token': token }
+      });
+      if (!res.ok) {
+        statusEl.textContent = res.status === 401 ? 'Token 不正确。' : `加载失败：HTTP ${res.status}`;
+        return;
+      }
+      const data = await res.json();
+      statusEl.textContent = `已加载 ${data.count} 条记录。`;
+      renderRows(data.items || []);
+    }
+
+    async function downloadCsv() {
+      const token = tokenInput.value.trim();
+      if (!token) {
+        statusEl.textContent = '请先输入 OWNER_ACCESS_TOKEN。';
+        return;
+      }
+      localStorage.setItem('agent_vc_owner_token', token);
+      const limit = Math.max(1, Math.min(Number(limitInput.value || 500), 500));
+      const res = await fetch(`/owner/evaluations.csv?limit=${limit}`, {
+        headers: { 'X-Agent-VC-Owner-Token': token }
+      });
+      if (!res.ok) {
+        statusEl.textContent = res.status === 401 ? 'Token 不正确。' : `导出失败：HTTP ${res.status}`;
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'agent-vc-evaluations.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    document.querySelector('#load').addEventListener('click', loadRows);
+    document.querySelector('#csv').addEventListener('click', downloadCsv);
+    tokenInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') loadRows();
+    });
+  </script>
+</body>
+</html>
+"""
+
+
 @app.get("/owner/evaluations")
 async def owner_evaluations(request: Request, limit: int = 100) -> dict[str, Any]:
     require_owner(request)
