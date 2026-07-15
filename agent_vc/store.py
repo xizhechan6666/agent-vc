@@ -48,6 +48,11 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         "contact_hint": "ALTER TABLE evaluations ADD COLUMN contact_hint TEXT",
         "report_token": "ALTER TABLE evaluations ADD COLUMN report_token TEXT",
         "owner_preview": "ALTER TABLE evaluations ADD COLUMN owner_preview INTEGER NOT NULL DEFAULT 0",
+        "project_json": "ALTER TABLE evaluations ADD COLUMN project_json TEXT",
+        "answers_json": "ALTER TABLE evaluations ADD COLUMN answers_json TEXT",
+        "payer_wallet": "ALTER TABLE evaluations ADD COLUMN payer_wallet TEXT",
+        "source": "ALTER TABLE evaluations ADD COLUMN source TEXT",
+        "report_url": "ALTER TABLE evaluations ADD COLUMN report_url TEXT",
     }
     for column, statement in migrations.items():
         if column not in existing:
@@ -104,6 +109,8 @@ def save_evaluation(
     conn: sqlite3.Connection,
     *,
     project_name: str,
+    project: dict[str, Any] | None = None,
+    answers: list[dict[str, Any]] | None = None,
     report: dict[str, Any],
     gate: dict[str, Any],
     project_fingerprint: str = "",
@@ -111,6 +118,9 @@ def save_evaluation(
     duplicate: bool = False,
     contact_hint: str = "",
     report_token: str = "",
+    report_url: str = "",
+    payer_wallet: str = "",
+    source: str = "",
     owner_preview: bool = False,
 ) -> int:
     cursor = conn.execute(
@@ -127,10 +137,15 @@ def save_evaluation(
             duplicate_today,
             contact_hint,
             report_token,
+            report_url,
+            payer_wallet,
+            source,
             owner_preview,
+            project_json,
+            answers_json,
             report_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             project_name,
@@ -144,7 +159,12 @@ def save_evaluation(
             1 if duplicate else 0,
             contact_hint,
             report_token,
+            report_url,
+            payer_wallet,
+            source,
             1 if owner_preview else 0,
+            json.dumps(project or {}, ensure_ascii=False),
+            json.dumps(answers or [], ensure_ascii=False),
             json.dumps(report, ensure_ascii=False),
         ),
     )
@@ -158,7 +178,8 @@ def get_evaluation(conn: sqlite3.Connection, evaluation_id: int) -> dict[str, An
         SELECT id, created_at, project_name, total_score, recommendation,
                raw_eligible, final_candidate, batch_index, project_fingerprint,
                submitter_key, duplicate_today, contact_hint, report_token,
-               owner_preview, report_json
+               report_url, payer_wallet, source, owner_preview,
+               project_json, answers_json, report_json
         FROM evaluations
         WHERE id = ?
         """,
@@ -180,7 +201,12 @@ def get_evaluation(conn: sqlite3.Connection, evaluation_id: int) -> dict[str, An
         "duplicate_today": bool(row["duplicate_today"]),
         "contact_hint": row["contact_hint"],
         "report_token": row["report_token"],
+        "report_url": row["report_url"],
+        "payer_wallet": row["payer_wallet"],
+        "source": row["source"],
         "owner_preview": bool(row["owner_preview"]),
+        "project": json.loads(row["project_json"] or "{}"),
+        "answers": json.loads(row["answers_json"] or "[]"),
         "report_url_kind": "legacy_id",
         "report": json.loads(row["report_json"]),
     }
@@ -192,7 +218,8 @@ def get_evaluation_by_token(conn: sqlite3.Connection, report_token: str) -> dict
         SELECT id, created_at, project_name, total_score, recommendation,
                raw_eligible, final_candidate, batch_index, project_fingerprint,
                submitter_key, duplicate_today, contact_hint, report_token,
-               owner_preview, report_json
+               report_url, payer_wallet, source, owner_preview,
+               project_json, answers_json, report_json
         FROM evaluations
         WHERE report_token = ?
         """,
@@ -214,7 +241,53 @@ def get_evaluation_by_token(conn: sqlite3.Connection, report_token: str) -> dict
         "duplicate_today": bool(row["duplicate_today"]),
         "contact_hint": row["contact_hint"],
         "report_token": row["report_token"],
+        "report_url": row["report_url"],
+        "payer_wallet": row["payer_wallet"],
+        "source": row["source"],
         "owner_preview": bool(row["owner_preview"]),
+        "project": json.loads(row["project_json"] or "{}"),
+        "answers": json.loads(row["answers_json"] or "[]"),
         "report_url_kind": "agent_token",
         "report": json.loads(row["report_json"]),
     }
+
+
+def list_evaluations(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict[str, Any]]:
+    capped_limit = max(1, min(int(limit), 500))
+    rows = conn.execute(
+        """
+        SELECT id, created_at, project_name, total_score, recommendation,
+               raw_eligible, final_candidate, batch_index, project_fingerprint,
+               submitter_key, duplicate_today, contact_hint, report_token,
+               report_url, payer_wallet, source, owner_preview,
+               project_json, answers_json
+        FROM evaluations
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (capped_limit,),
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "created_at": row["created_at"],
+            "project_name": row["project_name"],
+            "total_score": row["total_score"],
+            "recommendation": row["recommendation"],
+            "raw_eligible": bool(row["raw_eligible"]),
+            "final_candidate": bool(row["final_candidate"]),
+            "batch_index": row["batch_index"],
+            "project_fingerprint": row["project_fingerprint"],
+            "submitter_key": row["submitter_key"],
+            "duplicate_today": bool(row["duplicate_today"]),
+            "contact_hint": row["contact_hint"],
+            "report_token": row["report_token"],
+            "report_url": row["report_url"],
+            "payer_wallet": row["payer_wallet"],
+            "source": row["source"],
+            "owner_preview": bool(row["owner_preview"]),
+            "project": json.loads(row["project_json"] or "{}"),
+            "answers": json.loads(row["answers_json"] or "[]"),
+        }
+        for row in rows
+    ]

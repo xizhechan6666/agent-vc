@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import csv
+import io
 import json
 import os
 import secrets
@@ -22,7 +24,14 @@ from agent_vc.evaluator import (
     submitter_key,
 )
 from agent_vc.prompt import INPUT_SCHEMA, REPORT_SCHEMA_HINT
-from agent_vc.store import connect, duplicate_today, get_evaluation, get_evaluation_by_token, save_evaluation
+from agent_vc.store import (
+    connect,
+    duplicate_today,
+    get_evaluation,
+    get_evaluation_by_token,
+    list_evaluations,
+    save_evaluation,
+)
 from agent_vc.sync import sync_evaluation
 from app import INDEX_HTML, a2mcp_document, bazaar_discovery_extension, openapi_document, report_page
 
@@ -494,11 +503,13 @@ def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: 
     fingerprint = project_fingerprint(project)
     user_key = submitter_key(project)
     contact_hint = str(project.get("contact") or project.get("email") or "")
+    payer_wallet = str(getattr(request.state, "payment_payer", "") or project.get("payer_wallet") or "")
+    source = "owner_preview" if owner_preview else "agent_client"
     report_token = secrets.token_urlsafe(18)
+    paid_report_url = absolute_url(request, f"/agent/reports/{report_token}")
     with connect() as conn:
         duplicate = duplicate_today(conn, project_fingerprint=fingerprint, submitter_key=user_key)
         gate = apply_investment_gate(report, conn, duplicate=duplicate)
-        paid_report_url = absolute_url(request, f"/agent/reports/{report_token}")
         report["paid_report_url"] = paid_report_url
         report["award_result"] = gate
         client_summary = build_client_summary(report, gate, paid_report_url)
@@ -506,6 +517,8 @@ def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: 
         request_id = save_evaluation(
             conn,
             project_name=str(report.get("project_name") or project.get("name") or "Unnamed Agent"),
+            project=project,
+            answers=answers,
             report=report,
             gate=gate,
             project_fingerprint=fingerprint,
@@ -513,13 +526,21 @@ def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: 
             duplicate=duplicate,
             contact_hint=contact_hint,
             report_token=report_token,
+            report_url=paid_report_url,
+            payer_wallet=payer_wallet,
+            source=source,
             owner_preview=owner_preview,
         )
     sync_status = sync_evaluation(
         {
             "request_id": request_id,
             "report_token": report_token,
-            "paid_report_url": absolute_url(request, f"/agent/reports/{report_token}"),
+            "paid_report_url": paid_report_url,
+            "report_url": paid_report_url,
+            "source": source,
+            "payer_wallet": payer_wallet,
+            "project": project,
+            "answers": answers,
             "project_fingerprint": fingerprint,
             "submitter_key": user_key,
             "duplicate_today": duplicate,
@@ -534,14 +555,78 @@ def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: 
     return {
         "request_id": request_id,
         "report_token": report_token,
-        "report_url": absolute_url(request, f"/agent/reports/{report_token}"),
+        "report_url": paid_report_url,
         "legacy_report_url": absolute_url(request, f"/reports/{request_id}"),
         "investment_gate": gate,
         "client_summary": client_summary,
         "sync": sync_status,
+        "source": source,
+        "payer_wallet": payer_wallet,
         "owner_preview": owner_preview,
         "report": report,
     }
+
+
+@app.get("/owner/evaluations")
+async def owner_evaluations(request: Request, limit: int = 100) -> dict[str, Any]:
+    require_owner(request)
+    with connect() as conn:
+        rows = list_evaluations(conn, limit=limit)
+    return {"count": len(rows), "items": rows}
+
+
+@app.get("/owner/evaluations.csv")
+async def owner_evaluations_csv(request: Request, limit: int = 500) -> Response:
+    require_owner(request)
+    with connect() as conn:
+        rows = list_evaluations(conn, limit=limit)
+
+    output = io.StringIO()
+    fieldnames = [
+        "id",
+        "created_at",
+        "project_name",
+        "total_score",
+        "recommendation",
+        "final_candidate",
+        "duplicate_today",
+        "contact_hint",
+        "payer_wallet",
+        "source",
+        "report_url",
+        "project_one_liner",
+        "project_website",
+        "project_twitter",
+        "project_agent_wallet",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        project = row.get("project") if isinstance(row.get("project"), dict) else {}
+        writer.writerow(
+            {
+                "id": row.get("id"),
+                "created_at": row.get("created_at"),
+                "project_name": row.get("project_name"),
+                "total_score": row.get("total_score"),
+                "recommendation": row.get("recommendation"),
+                "final_candidate": row.get("final_candidate"),
+                "duplicate_today": row.get("duplicate_today"),
+                "contact_hint": row.get("contact_hint"),
+                "payer_wallet": row.get("payer_wallet"),
+                "source": row.get("source"),
+                "report_url": row.get("report_url"),
+                "project_one_liner": project.get("one_liner") or project.get("summary") or "",
+                "project_website": project.get("website") or project.get("product_url") or "",
+                "project_twitter": project.get("twitter") or project.get("x") or "",
+                "project_agent_wallet": project.get("agent_wallet") or project.get("wallet_address") or "",
+            }
+        )
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=agent-vc-evaluations.csv"},
+    )
 
 
 @app.post("/interview")

@@ -246,6 +246,33 @@ If `answers` is empty, `/owner/simulate` returns the follow-up questions and a c
 
 Do not commit `OWNER_ACCESS_TOKEN`. Set it only in the deployment environment.
 
+## Candidate Database
+
+Every completed `/evaluate` and `/owner/evaluate` call is saved to SQLite before an optional external sync runs.
+
+Saved fields include:
+
+- Raw submitted `project` fields.
+- Follow-up `answers`.
+- x402 payer wallet when available.
+- Contact hint.
+- Score, recommendation, duplicate flag, investment gate result, and report URL.
+- Source: `agent_client` or `owner_preview`.
+
+Owner-only exports:
+
+```bash
+curl -s "https://agent-vc-4a3m.onrender.com/owner/evaluations?limit=100" \
+  -H "X-Agent-VC-Owner-Token: $OWNER_ACCESS_TOKEN"
+```
+
+```bash
+curl -L "https://agent-vc-4a3m.onrender.com/owner/evaluations.csv?limit=500&owner_token=$OWNER_ACCESS_TOKEN" \
+  -o agent-vc-evaluations.csv
+```
+
+For a permanent online table, set `DB_SYNC_WEBHOOK_URL` to your own Google Sheets, Airtable, Supabase, or Notion webhook endpoint. If `DB_SYNC_SECRET` is set, the app sends `Authorization: Bearer <secret>`.
+
 ## Verification
 
 ```bash

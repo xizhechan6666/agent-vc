@@ -169,6 +169,33 @@ Behavior:
 - Generated reports are saved so `report_url` works.
 - Rows are marked `owner_preview = 1` and excluded from duplicate checks and investment quota windows.
 
+## Candidate Database and Export
+
+Each completed evaluation is saved to SQLite first. The row contains the raw project submission, follow-up answers, payer wallet when x402 provides it, contact hint, score, recommendation, investment gate result, duplicate flag, source, and report URL.
+
+Owner-only JSON export:
+
+```bash
+curl -s "https://agent-vc-4a3m.onrender.com/owner/evaluations?limit=100" \
+  -H "X-Agent-VC-Owner-Token: $OWNER_ACCESS_TOKEN"
+```
+
+Owner-only CSV export:
+
+```bash
+curl -L "https://agent-vc-4a3m.onrender.com/owner/evaluations.csv?limit=500&owner_token=$OWNER_ACCESS_TOKEN" \
+  -o agent-vc-evaluations.csv
+```
+
+For a durable online table, configure:
+
+```bash
+DB_SYNC_WEBHOOK_URL=https://your-database-webhook.example/agent-vc
+DB_SYNC_SECRET=<private shared secret>
+```
+
+The sync is best-effort. Report generation still succeeds if the external table is temporarily unavailable.
+
 ## Verification Commands
 
 Syntax and schema:
