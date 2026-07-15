@@ -12,8 +12,9 @@ from typing import Any
 def sync_evaluation(payload: dict[str, Any]) -> dict[str, Any]:
     """Send an evaluation payload to a user-owned database API when configured.
 
-    The app still writes to local SQLite first. This hook is intentionally
-    best-effort so report generation does not fail if the external database is
+    The app writes to its primary configured store first: Supabase/Postgres in
+    production, SQLite only as a local fallback. This hook is intentionally
+    best-effort so report generation does not fail if an external mirror is
     temporarily unavailable.
     """
 

@@ -87,6 +87,8 @@ fee: 5
 endpoint: https://agent-vc-4a3m.onrender.com/evaluate
 ```
 
+Only one OKX.AI service should be listed for Agent `#5814`: `Agent VC Investment Diagnosis`. The older duplicate service `Investment Memo` was removed.
+
 The service manifest is available at:
 
 ```text
@@ -248,7 +250,7 @@ Do not commit `OWNER_ACCESS_TOKEN`. Set it only in the deployment environment.
 
 ## Candidate Database
 
-Every completed `/evaluate` and `/owner/evaluate` call is saved to SQLite before an optional external sync runs.
+Every completed `/evaluate` and `/owner/evaluate` call is saved to durable Supabase Postgres in production. Local SQLite is only a development fallback when `DATABASE_URL` is not configured.
 
 Saved fields include:
 
@@ -258,6 +260,12 @@ Saved fields include:
 - Contact hint.
 - Score, recommendation, duplicate flag, investment gate result, and report URL.
 - Source: `agent_client` or `owner_preview`.
+
+Owner-only dashboard:
+
+```text
+https://agent-vc-4a3m.onrender.com/owner/dashboard
+```
 
 Owner-only exports:
 
@@ -271,11 +279,11 @@ curl -L "https://agent-vc-4a3m.onrender.com/owner/evaluations.csv?limit=500&owne
   -o agent-vc-evaluations.csv
 ```
 
-For a permanent online table, set `DB_SYNC_WEBHOOK_URL` to your own Google Sheets, Airtable, Supabase, or Notion webhook endpoint. If `DB_SYNC_SECRET` is set, the app sends `Authorization: Bearer <secret>`.
+The optional `DB_SYNC_WEBHOOK_URL` hook can still mirror rows to Google Sheets, Airtable, Notion, or another database. If `DB_SYNC_SECRET` is set, the app sends `Authorization: Bearer <secret>`.
 
 ### Durable Report Storage
 
-For production, configure a Postgres database. Without it, the app falls back to local SQLite, which can disappear when a free Render instance restarts or redeploys.
+Production is configured for Supabase Postgres through `DATABASE_URL`. Without it, the app falls back to local SQLite, which can disappear when a free Render instance restarts or redeploys.
 
 Recommended setup:
 
@@ -301,7 +309,8 @@ Expected storage section:
   "storage": {
     "backend": "postgres",
     "durable": true,
-    "database_url_configured": true
+    "database_url_configured": true,
+    "ok": true
   }
 }
 ```

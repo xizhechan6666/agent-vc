@@ -40,7 +40,7 @@ Agent VC has two separate surfaces:
    - `POST /evaluate`.
    - Protected by x402 when `X402_ENABLED=1`.
    - Generates the real JSON report.
-   - Writes the evaluation to SQLite.
+   - Writes the evaluation to Supabase Postgres in production.
    - Applies duplicate checks and quota gating.
    - Returns `report_url` pointing to `/agent/reports/{report_token}`.
 
@@ -171,7 +171,13 @@ Behavior:
 
 ## Candidate Database and Export
 
-Each completed evaluation is saved to SQLite first. The row contains the raw project submission, follow-up answers, payer wallet when x402 provides it, contact hint, score, recommendation, investment gate result, duplicate flag, source, and report URL.
+Each completed evaluation is saved to Supabase Postgres in production. The row contains the raw project submission, follow-up answers, payer wallet when x402 provides it, contact hint, score, recommendation, investment gate result, duplicate flag, source, and report URL.
+
+Owner-only dashboard:
+
+```text
+https://agent-vc-4a3m.onrender.com/owner/dashboard
+```
 
 Owner-only JSON export:
 
@@ -187,18 +193,18 @@ curl -L "https://agent-vc-4a3m.onrender.com/owner/evaluations.csv?limit=500&owne
   -o agent-vc-evaluations.csv
 ```
 
-For a durable online table, configure:
+Optional mirror sync:
 
 ```bash
 DB_SYNC_WEBHOOK_URL=https://your-database-webhook.example/agent-vc
 DB_SYNC_SECRET=<private shared secret>
 ```
 
-The sync is best-effort. Report generation still succeeds if the external table is temporarily unavailable.
+This sync is best-effort. Report generation still succeeds if the external mirror is temporarily unavailable.
 
 ## Durable Report Storage
 
-Use Postgres in production. Local SQLite is acceptable for development only; it can be lost when a free Render instance restarts or when the container is replaced. If SQLite is lost, old `/agent/reports/{report_token}` links return `Report not found`.
+Postgres is required for production. Local SQLite is acceptable for development only; it can be lost when a free Render instance restarts or when the container is replaced. If SQLite is lost, old `/agent/reports/{report_token}` links return `Report not found`.
 
 Set these Render environment variables:
 
@@ -221,11 +227,14 @@ The response should include:
 "storage": {
   "backend": "postgres",
   "durable": true,
-  "database_url_configured": true
+  "database_url_configured": true,
+  "ok": true
 }
 ```
 
 If it still shows `sqlite`, new reports can still disappear after redeploys.
+
+Current production state is Supabase Postgres through the Supabase Transaction pooler. Do not use the Supabase direct connection URL on Render; use the pooler URL on port `6543`.
 
 ## Verification Commands
 
