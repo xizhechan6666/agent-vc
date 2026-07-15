@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import secrets
+import time
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -30,8 +34,210 @@ def x402_enabled() -> bool:
     return os.getenv("X402_ENABLED", "0") == "1"
 
 
+def x402_mode() -> str:
+    return os.getenv("X402_MODE", "okx").lower()
+
+
+def x402_price_amount() -> str:
+    configured_amount = os.getenv("X402_AMOUNT")
+    if configured_amount:
+        return configured_amount
+
+    price = os.getenv("X402_PRICE", "5")
+    normalized = price.replace("$", "").replace("USDT", "").replace("USDC", "").strip()
+    try:
+        value = Decimal(normalized)
+    except InvalidOperation as exc:
+        raise RuntimeError("X402_PRICE must be a numeric stablecoin amount, for example 5 or $5.00") from exc
+
+    decimals = int(os.getenv("X402_ASSET_DECIMALS", "6"))
+    return str(int(value * (Decimal(10) ** decimals)))
+
+
+def x402_network() -> str:
+    return os.getenv("X402_NETWORK", "eip155:196")
+
+
+def x402_asset() -> str:
+    return os.getenv("X402_ASSET", "0x779ded0c9e1022225f8e0630b35a9b54be713736")
+
+
+def x402_asset_name() -> str:
+    return os.getenv("X402_ASSET_NAME", "USDT")
+
+
+def x402_asset_version() -> str:
+    return os.getenv("X402_ASSET_VERSION", "1")
+
+
+def x402_chain_id() -> int:
+    network = x402_network()
+    if not network.startswith("eip155:"):
+        raise RuntimeError("Only EVM CAIP-2 x402 networks are supported")
+    return int(network.split(":", 1)[1])
+
+
+def b64_json(payload: dict[str, Any]) -> str:
+    return base64.b64encode(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()).decode()
+
+
+def build_x402_accept() -> dict[str, Any]:
+    pay_to = os.getenv("X402_PAY_TO")
+    if not pay_to:
+        raise RuntimeError("X402_ENABLED=1 requires X402_PAY_TO")
+    return {
+        "scheme": os.getenv("X402_SCHEME", "exact"),
+        "network": x402_network(),
+        "asset": x402_asset(),
+        "amount": x402_price_amount(),
+        "payTo": pay_to,
+        "maxTimeoutSeconds": int(os.getenv("X402_MAX_TIMEOUT_SECONDS", "300")),
+        "extra": {"name": x402_asset_name(), "version": x402_asset_version()},
+    }
+
+
+def build_payment_required(request: Request, error: str = "Payment required") -> dict[str, Any]:
+    return {
+        "x402Version": 2,
+        "error": error,
+        "resource": {
+            "url": absolute_url(request, "/evaluate"),
+            "description": "Agent VC investment diagnosis report for OKX.AI Agent projects.",
+            "mimeType": "application/json",
+            "serviceName": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
+            "tags": ["agent-vc", "okx-ai", "diagnosis"],
+        },
+        "accepts": [build_x402_accept()],
+        "extensions": {"bazaar": bazaar_discovery_extension()},
+    }
+
+
+def payment_signature_header(request: Request) -> str | None:
+    return request.headers.get("PAYMENT-SIGNATURE") or request.headers.get("X-PAYMENT")
+
+
+def decode_header_json(value: str) -> dict[str, Any]:
+    return json.loads(base64.b64decode(value).decode())
+
+
+def validate_payment_signature(header: str) -> tuple[bool, str, str]:
+    try:
+        envelope = decode_header_json(header)
+        accepted = envelope.get("accepted")
+        payload = envelope.get("payload")
+        if not isinstance(accepted, dict) or not isinstance(payload, dict):
+            return False, "", "Malformed payment signature."
+
+        expected = build_x402_accept()
+        for key in ("scheme", "network", "asset", "amount", "payTo"):
+            if str(accepted.get(key, "")).lower() != str(expected[key]).lower():
+                return False, "", f"Payment field mismatch: {key}."
+
+        authorization = payload.get("authorization")
+        signature = payload.get("signature")
+        if not isinstance(authorization, dict) or not isinstance(signature, str):
+            return False, "", "Missing authorization signature."
+
+        auth_from = str(authorization.get("from", ""))
+        auth_to = str(authorization.get("to", ""))
+        auth_value = str(authorization.get("value", ""))
+        valid_after = int(str(authorization.get("validAfter", "0")))
+        valid_before = int(str(authorization.get("validBefore", "0")))
+        nonce = str(authorization.get("nonce", ""))
+        now = int(time.time())
+        if auth_to.lower() != str(expected["payTo"]).lower() or auth_value != str(expected["amount"]):
+            return False, "", "Authorization does not match this resource."
+        if valid_after > now or valid_before < now:
+            return False, "", "Payment authorization is outside its validity window."
+
+        from eth_account import Account
+        from eth_account.messages import encode_typed_data
+
+        typed_data = {
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"},
+                ],
+                "TransferWithAuthorization": [
+                    {"name": "from", "type": "address"},
+                    {"name": "to", "type": "address"},
+                    {"name": "value", "type": "uint256"},
+                    {"name": "validAfter", "type": "uint256"},
+                    {"name": "validBefore", "type": "uint256"},
+                    {"name": "nonce", "type": "bytes32"},
+                ],
+            },
+            "primaryType": "TransferWithAuthorization",
+            "domain": {
+                "name": str(expected["extra"]["name"]),
+                "version": str(expected["extra"]["version"]),
+                "chainId": x402_chain_id(),
+                "verifyingContract": str(expected["asset"]),
+            },
+            "message": {
+                "from": auth_from,
+                "to": auth_to,
+                "value": int(auth_value),
+                "validAfter": valid_after,
+                "validBefore": valid_before,
+                "nonce": nonce,
+            },
+        }
+        recovered = Account.recover_message(encode_typed_data(full_message=typed_data), signature=signature)
+        if recovered.lower() != auth_from.lower():
+            return False, "", "Payment signature does not match the authorization sender."
+        return True, auth_from, ""
+    except Exception as exc:
+        return False, "", f"Invalid payment signature: {exc}"
+
+
+def configure_okx_x402() -> None:
+    if not x402_enabled() or x402_mode() == "sdk":
+        return
+
+    @app.middleware("http")
+    async def okx_x402_middleware(request: Request, call_next: Any) -> Response:
+        if request.url.path != "/evaluate" or request.method.upper() != "POST":
+            return await call_next(request)
+
+        header = payment_signature_header(request)
+        if not header:
+            payload = build_payment_required(request)
+            return JSONResponse(
+                content={},
+                status_code=402,
+                headers={"PAYMENT-REQUIRED": b64_json(payload)},
+            )
+
+        valid, payer, error = validate_payment_signature(header)
+        if not valid:
+            payload = build_payment_required(request, error)
+            return JSONResponse(
+                content={"error": "payment_verification_failed", "message": error},
+                status_code=402,
+                headers={"PAYMENT-REQUIRED": b64_json(payload)},
+            )
+
+        request.state.payment_payer = payer
+        response = await call_next(request)
+        if response.status_code < 400:
+            response.headers["PAYMENT-RESPONSE"] = b64_json(
+                {
+                    "success": True,
+                    "status": "success",
+                    "payer": payer,
+                    "transaction": "",
+                    "network": x402_network(),
+                }
+            )
+        return response
+
+
 def configure_x402() -> None:
-    if not x402_enabled():
+    if not x402_enabled() or x402_mode() != "sdk":
         return
 
     pay_to = os.getenv("X402_PAY_TO")
@@ -43,13 +249,18 @@ def configure_x402() -> None:
         from x402.http.middleware.fastapi import payment_middleware
         from x402.http.types import PaymentOption, RouteConfig
         from x402.mechanisms.evm.exact import ExactEvmServerScheme
+        from x402.schemas import AssetAmount
         from x402.server import x402ResourceServer
     except ModuleNotFoundError as exc:
         raise RuntimeError("Install dependencies with `pip install -r requirements.txt`") from exc
 
-    price = os.getenv("X402_PRICE", "$5.00")
-    network = os.getenv("X402_NETWORK", "eip155:84532")
+    network = x402_network()
     scheme = os.getenv("X402_SCHEME", "exact")
+    price = AssetAmount(
+        amount=x402_price_amount(),
+        asset=x402_asset(),
+        extra={"name": x402_asset_name(), "version": x402_asset_version()},
+    )
 
     routes = {
         "POST /evaluate": RouteConfig(
@@ -83,6 +294,7 @@ def configure_x402() -> None:
     )
 
 
+configure_okx_x402()
 configure_x402()
 
 
@@ -157,9 +369,13 @@ async def integration_check(request: Request) -> dict[str, Any]:
         "browser_free_full_report_enabled": os.getenv("DEMO_EVALUATE_ENABLED", "0") == "1",
         "x402": {
             "enabled": x402_enabled(),
-            "price": os.getenv("X402_PRICE", "$5.00"),
-            "network": os.getenv("X402_NETWORK", "eip155:84532"),
+            "mode": x402_mode(),
+            "price": os.getenv("X402_PRICE", "5"),
+            "amount": x402_price_amount() if x402_enabled() else None,
+            "network": x402_network(),
             "scheme": os.getenv("X402_SCHEME", "exact"),
+            "asset": x402_asset(),
+            "asset_name": x402_asset_name(),
             "pay_to_configured": bool(os.getenv("X402_PAY_TO")),
         },
         "agent_client_contract": {

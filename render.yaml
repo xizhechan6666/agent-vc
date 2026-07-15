@@ -22,9 +22,19 @@ services:
       - key: X402_PAY_TO
         value: 0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
       - key: X402_PRICE
-        value: $5.00
+        value: 5
+      - key: X402_MODE
+        value: okx
       - key: X402_NETWORK
-        value: eip155:84532
+        value: eip155:196
+      - key: X402_ASSET
+        value: 0x779ded0c9e1022225f8e0630b35a9b54be713736
+      - key: X402_ASSET_NAME
+        value: USDT
+      - key: X402_ASSET_VERSION
+        value: 1
+      - key: X402_ASSET_DECIMALS
+        value: 6
       - key: X402_SCHEME
         value: exact
       - key: X402_MAX_TIMEOUT_SECONDS

@@ -38,8 +38,13 @@ DEMO_EVALUATE_ENABLED=0
 
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
-X402_PRICE=$5.00
-X402_NETWORK=eip155:84532
+X402_PRICE=5
+X402_MODE=okx
+X402_NETWORK=eip155:196
+X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
+X402_ASSET_NAME=USDT
+X402_ASSET_VERSION=1
+X402_ASSET_DECIMALS=6
 X402_SCHEME=exact
 X402_MAX_TIMEOUT_SECONDS=300
 ```
@@ -95,7 +100,8 @@ Expected response:
 - HTTP 402.
 - `PAYMENT-REQUIRED` header exists.
 - Decoded payload uses `x402Version: 2`.
-- `accepts[0].network` is `eip155:84532`.
+- `accepts[0].network` is `eip155:196`.
+- `accepts[0].asset` is `0x779ded0c9e1022225f8e0630b35a9b54be713736`.
 - `accepts[0].amount` is `5000000`.
 - `extensions.bazaar.info.input.method` is `POST`.
 - `extensions.bazaar.info.input.body.required` contains `project`.
@@ -126,12 +132,12 @@ Production boundaries:
 Current working x402 payment network:
 
 ```bash
-X402_NETWORK=eip155:84532
+X402_NETWORK=eip155:196
+X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
+X402_ASSET_NAME=USDT
 ```
 
-The installed x402 Python SDK provides a default USDC asset for `eip155:84532`. X Layer identity and optional Agent wallet verification remain X Layer-oriented (`eip155:196`), while the production payment gate currently uses the verified x402 network above.
-
-Only change the payment network after the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed for that network.
+The x402 challenge is intentionally aligned with the OKX.AI service registration: X Layer (`eip155:196`) and USDT (`0x779ded0c9e1022225f8e0630b35a9b54be713736`). Keep `X402_MODE=okx` unless an OKX-supported external facilitator URL is provided.
 
 ## Local Verification
 
@@ -142,8 +148,10 @@ Only change the payment network after the OKX x402 facilitator and supported X L
 ```bash
 X402_ENABLED=1 \
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c \
-X402_PRICE='$5.00' \
-X402_NETWORK=eip155:84532 \
+X402_PRICE=5 \
+X402_MODE=okx \
+X402_NETWORK=eip155:196 \
+X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736 \
 .venv/bin/python - <<'PY'
 import base64, json
 from fastapi.testclient import TestClient

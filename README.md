@@ -93,14 +93,17 @@ Current working production configuration:
 
 ```bash
 X402_ENABLED=1
-X402_PRICE=$5.00
-X402_NETWORK=eip155:84532
+X402_PRICE=5
+X402_MODE=okx
+X402_NETWORK=eip155:196
+X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
+X402_ASSET_NAME=USDT
 X402_SCHEME=exact
 ```
 
 Unauthenticated calls to `/evaluate` return HTTP 402 with a `PAYMENT-REQUIRED` header. The header contains x402 v2 requirements and Bazaar discovery metadata.
 
-The current x402 Python SDK provides a default USDC asset for `eip155:84532`. Keep this payment network unchanged unless the OKX x402 facilitator and supported X Layer stablecoin contract are confirmed for `eip155:196`.
+The service challenge is configured for X Layer (`eip155:196`) and the OKX-supported USDT contract used by A2MCP service registration. The amount is `5000000`, representing 5 units with 6 decimals. `X402_MODE=okx` returns the challenge immediately and verifies the replayed `PAYMENT-SIGNATURE` locally so OKX Agent Client calls do not depend on the generic x402.org facilitator.
 
 ## Response Contract
 
@@ -208,8 +211,11 @@ LLM_MODEL=deepseek-chat
 SERVICE_FEE_USDT=5
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
-X402_PRICE=$5.00
-X402_NETWORK=eip155:84532
+X402_PRICE=5
+X402_MODE=okx
+X402_NETWORK=eip155:196
+X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
+X402_ASSET_NAME=USDT
 X402_SCHEME=exact
 DEMO_EVALUATE_ENABLED=0
 ```
@@ -234,7 +240,8 @@ Expected unpaid production result:
 - `PAYMENT-REQUIRED` header exists.
 - Decoded x402 payload has `x402Version: 2`.
 - Amount is `5000000`.
-- Network is `eip155:84532`.
+- Network is `eip155:196`.
+- Asset is `0x779ded0c9e1022225f8e0630b35a9b54be713736`.
 - Bazaar input method is `POST`.
 
 More operational details are in `OPERATIONS.md`; deployment details are in `DEPLOY.md`.

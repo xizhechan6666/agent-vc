@@ -118,12 +118,15 @@ Deeper transaction graph analysis should be added only after the X Layer indexin
 Current working x402 config:
 
 ```bash
-X402_PRICE=$5.00
-X402_NETWORK=eip155:84532
+X402_PRICE=5
+X402_MODE=okx
+X402_NETWORK=eip155:196
+X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
+X402_ASSET_NAME=USDT
 X402_SCHEME=exact
 ```
 
-The current x402 Python SDK provides a default USDC asset for `eip155:84532`. X Layer identity and Agent wallet verification remain X Layer-oriented, while the production payment gate currently uses the verified x402 network above.
+The payment challenge must match the OKX.AI A2MCP service registration: X Layer (`eip155:196`) and USDT (`0x779ded0c9e1022225f8e0630b35a9b54be713736`). `X402_MODE=okx` returns the 402 challenge directly and verifies the replayed `PAYMENT-SIGNATURE` locally. This avoids the generic x402.org facilitator, which does not support `eip155:196`.
 
 ## Required Environment Variables
 
@@ -134,8 +137,13 @@ LLM_MODEL=deepseek-chat
 SERVICE_FEE_USDT=5
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
-X402_PRICE=$5.00
-X402_NETWORK=eip155:84532
+X402_PRICE=5
+X402_MODE=okx
+X402_NETWORK=eip155:196
+X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
+X402_ASSET_NAME=USDT
+X402_ASSET_VERSION=1
+X402_ASSET_DECIMALS=6
 X402_SCHEME=exact
 DEMO_EVALUATE_ENABLED=0
 ```
@@ -164,7 +172,8 @@ Expected result:
 - `PAYMENT-REQUIRED` header exists.
 - Decoded payload has `x402Version: 2`.
 - `accepts[0].amount` is `5000000`.
-- `accepts[0].network` is `eip155:84532`.
+- `accepts[0].network` is `eip155:196`.
+- `accepts[0].asset` is `0x779ded0c9e1022225f8e0630b35a9b54be713736`.
 - `extensions.bazaar.info.input.method` is `POST`.
 
 Real-payment replay is performed from a supported Agent Client with an authenticated Agentic Wallet and sufficient supported stablecoin balance.
