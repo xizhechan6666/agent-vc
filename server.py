@@ -359,6 +359,15 @@ configure_okx_x402()
 configure_x402()
 
 
+@app.middleware("http")
+async def payment_header_exposure_middleware(request: Request, call_next: Any) -> Response:
+    response = await call_next(request)
+    if request.url.path == "/evaluate":
+        for key, value in x402_cors_headers().items():
+            response.headers.setdefault(key, value)
+    return response
+
+
 def absolute_url(request: Request, path: str) -> str:
     public_base = os.getenv("PUBLIC_BASE_URL")
     if public_base:
