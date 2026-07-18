@@ -155,6 +155,13 @@ def payment_required_headers(payload: dict[str, Any]) -> dict[str, str]:
     return {"PAYMENT-REQUIRED": b64_json(payload), **x402_cors_headers()}
 
 
+def payment_probe_response(request: Request, *, head: bool = False) -> Response:
+    payload = build_payment_required(request)
+    if head:
+        return Response(status_code=402, headers=payment_required_headers(payload))
+    return JSONResponse(content={}, status_code=402, headers=payment_required_headers(payload))
+
+
 def payment_signature_header(request: Request) -> str | None:
     return request.headers.get("PAYMENT-SIGNATURE") or request.headers.get("X-PAYMENT")
 
@@ -604,7 +611,9 @@ async def schema() -> dict[str, Any]:
 
 
 @app.get("/evaluate")
-async def evaluate_probe(request: Request) -> dict[str, Any]:
+async def evaluate_probe(request: Request) -> dict[str, Any] | JSONResponse:
+    if x402_enabled():
+        return payment_probe_response(request)
     return {
         "ok": True,
         "service": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
@@ -625,7 +634,9 @@ async def evaluate_probe(request: Request) -> dict[str, Any]:
 
 
 @app.head("/evaluate")
-async def head_evaluate() -> Response:
+async def head_evaluate(request: Request) -> Response:
+    if x402_enabled():
+        return payment_probe_response(request, head=True)
     return Response(content=b"", media_type="application/json", headers={"Content-Length": "0"})
 
 

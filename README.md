@@ -115,7 +115,7 @@ OKX_SECRET_KEY=...
 OKX_PASSPHRASE=...
 ```
 
-Unauthenticated calls to `/evaluate` return HTTP 402 with a compact `PAYMENT-REQUIRED` header. In official SDK mode the payment challenge is read from the header; full request and response schemas remain available through `/a2mcp.json` and `/openapi.json`.
+Unauthenticated calls to `/evaluate` return HTTP 402 with a compact `PAYMENT-REQUIRED` header. `POST /evaluate` is the paid business call that returns the report after settlement. `GET /evaluate` and `HEAD /evaluate` also return a payment challenge in production so OKX.AI marketplace validators do not confuse the endpoint with a free probe. Full request and response schemas remain available through `/a2mcp.json` and `/openapi.json`.
 
 The service challenge is configured for X Layer (`eip155:196`) and the OKX-supported USDT contract used by A2MCP service registration. The amount is `5000000`, representing 5 units with 6 decimals. `X402_MODE=sdk` uses OKX's facilitator with synchronous settlement. The older `X402_MODE=okx` compatibility path only validates payment authorization fields locally and does not settle funds; do not use it for production charging.
 
