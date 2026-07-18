@@ -387,6 +387,175 @@ def request_adapter(request: Request) -> Any:
     return Adapter()
 
 
+PROJECT_INPUT_FIELDS = {
+    "name",
+    "one_liner",
+    "target_user",
+    "problem",
+    "solution",
+    "pricing",
+    "traction",
+    "differentiation",
+    "agent_url",
+    "product_url",
+    "website",
+    "social",
+    "contact",
+    "email",
+    "agent_wallet_address",
+    "wallet_address",
+    "wallet_chain",
+    "wallet_signature",
+    "wallet_source",
+    "onchain_evidence",
+    "founder_pitch",
+    "risks",
+}
+
+
+def clean_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().split())
+
+
+def project_fields_from_mapping(value: dict[str, Any]) -> dict[str, Any]:
+    project: dict[str, Any] = {}
+    for key in PROJECT_INPUT_FIELDS:
+        if key in value and value[key] not in (None, ""):
+            project[key] = value[key]
+    return project
+
+
+def project_from_text(text: str) -> dict[str, Any]:
+    clean = clean_text(text)
+    if not clean:
+        return {}
+    first_line = clean.splitlines()[0].strip() if "\n" in text else clean
+    name = first_line[:80].strip(" -:：") or "Submitted Agent Project"
+    if len(name) > 60 or len(clean) == len(name):
+        name = "Submitted Agent Project"
+    return {
+        "name": name,
+        "one_liner": clean[:420],
+        "target_user": "未提供，需在后续人工沟通中确认。",
+        "problem": clean[:420],
+        "founder_pitch": clean,
+    }
+
+
+def text_from_messages(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    parts: list[str] = []
+    for item in value:
+        if isinstance(item, dict):
+            content = item.get("content") or item.get("text") or item.get("message")
+            if isinstance(content, dict):
+                nested_project = content.get("project") if isinstance(content.get("project"), dict) else content
+                parts.append(json.dumps(nested_project, ensure_ascii=False))
+            elif isinstance(content, list):
+                parts.extend(clean_text(part) for part in content if clean_text(part))
+            elif content:
+                parts.append(clean_text(content))
+        elif item:
+            parts.append(clean_text(item))
+    return "\n".join(part for part in parts if part)
+
+
+def normalize_answers(value: Any) -> list[dict[str, str]]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, list):
+        answers: list[dict[str, str]] = []
+        for index, item in enumerate(value, start=1):
+            if isinstance(item, dict):
+                question = clean_text(item.get("question") or item.get("q") or f"补充问题 {index}")
+                answer = clean_text(item.get("answer") or item.get("a") or item.get("content") or item.get("text"))
+                if answer:
+                    answers.append({"question": question, "answer": answer})
+            elif clean_text(item):
+                answers.append({"question": f"补充说明 {index}", "answer": clean_text(item)})
+        return answers
+    if isinstance(value, dict):
+        return [
+            {"question": clean_text(key), "answer": clean_text(answer)}
+            for key, answer in value.items()
+            if clean_text(answer)
+        ]
+    return [{"question": "补充说明", "answer": clean_text(value)}] if clean_text(value) else []
+
+
+def normalize_evaluation_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    project_candidates: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+    answers = normalize_answers(payload.get("answers"))
+
+    raw_project = payload.get("project")
+    if isinstance(raw_project, dict):
+        project_candidates.append(raw_project)
+    elif isinstance(raw_project, str):
+        text_parts.append(raw_project)
+
+    for key in ("input", "arguments", "params", "data"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            nested_project = nested.get("project")
+            if isinstance(nested_project, dict):
+                project_candidates.append(nested_project)
+            else:
+                fields = project_fields_from_mapping(nested)
+                if fields:
+                    project_candidates.append(fields)
+            if not answers and "answers" in nested:
+                answers = normalize_answers(nested.get("answers"))
+        elif isinstance(nested, str):
+            text_parts.append(nested)
+
+    direct_fields = project_fields_from_mapping(payload)
+    if direct_fields:
+        project_candidates.append(direct_fields)
+
+    for key in ("message", "query", "prompt", "content", "text", "description"):
+        if isinstance(payload.get(key), str):
+            text_parts.append(payload[key])
+    messages_text = text_from_messages(payload.get("messages"))
+    if messages_text:
+        text_parts.append(messages_text)
+
+    project: dict[str, Any] = {}
+    for candidate in project_candidates:
+        for key, value in candidate.items():
+            if value not in (None, ""):
+                project[key] = value
+
+    natural_text = "\n".join(clean_text(part) for part in text_parts if clean_text(part))
+    if not project and natural_text:
+        project = project_from_text(natural_text)
+    elif project and natural_text and not project.get("founder_pitch"):
+        project["founder_pitch"] = natural_text
+
+    if not project:
+        project = {
+            "name": "Submitted Agent Project",
+            "one_liner": "用户已完成付费调用，但本次请求没有携带足够的项目资料。",
+            "target_user": "未提供，需补充。",
+            "problem": "未提供，需补充。",
+            "solution": "未提供，需补充。",
+            "founder_pitch": "本次请求缺少项目字段。建议用户补充项目名称、一句话介绍、目标用户、核心问题、解决方案、产品链接或 Agent 钱包。",
+        }
+
+    project["name"] = clean_text(project.get("name")) or "Submitted Agent Project"
+    project["one_liner"] = (
+        clean_text(project.get("one_liner"))
+        or clean_text(project.get("summary"))
+        or clean_text(project.get("problem"))
+        or clean_text(project.get("founder_pitch"))
+        or "未提供一句话介绍。"
+    )
+    project.setdefault("target_user", "未提供，需补充。")
+    project.setdefault("problem", project["one_liner"])
+    return project, answers
+
+
 def require_owner(request: Request) -> None:
     expected = os.getenv("OWNER_ACCESS_TOKEN")
     provided = request.headers.get("X-Agent-VC-Owner-Token") or request.query_params.get("owner_token")
@@ -556,12 +725,7 @@ async def agent_report(report_token: str) -> str:
 
 
 def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: bool = False) -> dict[str, Any]:
-    project = payload.get("project")
-    answers = payload.get("answers", [])
-    if not isinstance(project, dict):
-        raise HTTPException(status_code=400, detail="Expected object field: project")
-    if not isinstance(answers, list):
-        raise HTTPException(status_code=400, detail="Expected array field: answers")
+    project, answers = normalize_evaluation_payload(payload)
 
     report = evaluate_project(project, answers)
     fingerprint = project_fingerprint(project)
@@ -989,12 +1153,7 @@ async def owner_evaluate(payload: dict[str, Any], request: Request) -> dict[str,
 @app.post("/owner/simulate")
 async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     require_owner(request)
-    project = payload.get("project")
-    answers = payload.get("answers", [])
-    if not isinstance(project, dict):
-        raise HTTPException(status_code=400, detail="Expected object field: project")
-    if not isinstance(answers, list):
-        raise HTTPException(status_code=400, detail="Expected array field: answers")
+    project, answers = normalize_evaluation_payload(payload)
 
     questions = generate_interview(project).get("questions", [])
     conversation: list[dict[str, Any]] = [

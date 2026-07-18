@@ -804,52 +804,63 @@ def base_url(handler: BaseHTTPRequestHandler) -> str:
 
 
 def evaluate_request_schema() -> dict[str, Any]:
+    project_properties = {
+        "name": {"type": "string", "description": "Agent or project name."},
+        "one_liner": {"type": "string", "description": "One sentence pitch."},
+        "target_user": {"type": "string", "description": "Who pays or repeatedly uses it."},
+        "problem": {"type": "string", "description": "Problem being solved."},
+        "solution": {"type": "string", "description": "How the Agent solves it."},
+        "pricing": {"type": "string", "description": "Current or proposed pricing."},
+        "traction": {"type": "string", "description": "Users, revenue, reviews, usage, or testimonials."},
+        "differentiation": {
+            "type": "string",
+            "description": "Why users choose this over ChatGPT, Doubao, Codex, or existing agents.",
+        },
+        "agent_url": {"type": "string", "description": "OKX.AI Agent URL or Agent ID."},
+        "product_url": {"type": "string", "description": "Live product URL."},
+        "website": {"type": "string", "description": "Official website."},
+        "social": {"type": "string", "description": "X, Telegram, Discord, or community link."},
+        "contact": {"type": "string", "description": "Founder contact for selected projects."},
+        "agent_wallet_address": {
+            "type": "string",
+            "description": "Optional X Layer Agent wallet address, 0x-prefixed EVM address.",
+        },
+        "wallet_address": {
+            "type": "string",
+            "description": "Optional X Layer Agent wallet address, 0x-prefixed EVM address.",
+        },
+        "wallet_chain": {
+            "type": "string",
+            "description": "Wallet chain, default xlayer.",
+            "default": "xlayer",
+        },
+        "wallet_signature": {
+            "type": "string",
+            "description": "Optional signature proving ownership of the wallet address.",
+        },
+        "onchain_evidence": {
+            "type": "string",
+            "description": "Optional on-chain or product verification evidence.",
+        },
+        "founder_pitch": {"type": "string", "description": "Why this deserves investment."},
+        "risks": {"type": "string", "description": "Known risks or weak spots."},
+    }
     return {
         "type": "object",
-        "required": ["project"],
-        "additionalProperties": False,
+        "required": ["name", "one_liner"],
+        "additionalProperties": True,
         "properties": {
+            **project_properties,
+            "message": {
+                "type": "string",
+                "description": "Fallback natural-language project description. Use project fields when possible.",
+            },
             "project": {
                 "type": "object",
-                "required": ["name", "one_liner", "target_user", "problem"],
+                "description": "Backward-compatible nested project object. Prefer top-level fields for Agent Client calls.",
+                "required": ["name", "one_liner"],
                 "additionalProperties": True,
-                "properties": {
-                    "name": {"type": "string", "description": "Agent or project name."},
-                    "one_liner": {"type": "string", "description": "One sentence pitch."},
-                    "target_user": {"type": "string", "description": "Who pays or repeatedly uses it."},
-                    "problem": {"type": "string", "description": "Problem being solved."},
-                    "solution": {"type": "string", "description": "How the Agent solves it."},
-                    "pricing": {"type": "string", "description": "Current or proposed pricing."},
-                    "traction": {"type": "string", "description": "Users, revenue, reviews, usage, or testimonials."},
-                    "differentiation": {
-                        "type": "string",
-                        "description": "Why users choose this over ChatGPT, Doubao, Codex, or existing agents.",
-                    },
-                    "agent_url": {"type": "string", "description": "OKX.AI Agent URL or Agent ID."},
-                    "product_url": {"type": "string", "description": "Live product URL."},
-                    "website": {"type": "string", "description": "Official website."},
-                    "social": {"type": "string", "description": "X, Telegram, Discord, or community link."},
-                    "contact": {"type": "string", "description": "Founder contact for selected projects."},
-                    "agent_wallet_address": {
-                        "type": "string",
-                        "description": "Optional X Layer Agent wallet address, 0x-prefixed EVM address.",
-                    },
-                    "wallet_chain": {
-                        "type": "string",
-                        "description": "Wallet chain, default xlayer.",
-                        "default": "xlayer",
-                    },
-                    "wallet_signature": {
-                        "type": "string",
-                        "description": "Optional signature proving ownership of the wallet address.",
-                    },
-                    "onchain_evidence": {
-                        "type": "string",
-                        "description": "Optional on-chain or product verification evidence.",
-                    },
-                    "founder_pitch": {"type": "string", "description": "Why this deserves investment."},
-                    "risks": {"type": "string", "description": "Known risks or weak spots."},
-                },
+                "properties": project_properties,
             },
             "answers": {
                 "type": "array",
