@@ -28,7 +28,7 @@ services:
       - key: X402_PRICE
         value: 5
       - key: X402_MODE
-        value: okx
+        value: sdk
       - key: X402_NETWORK
         value: eip155:196
       - key: X402_ASSET
@@ -43,6 +43,8 @@ services:
         value: exact
       - key: X402_MAX_TIMEOUT_SECONDS
         value: 300
+      - key: X402_SYNC_SETTLE
+        value: 1
       - key: INVESTMENT_WINDOW_SIZE
         value: 20
       - key: INVESTMENT_MAX_PER_WINDOW

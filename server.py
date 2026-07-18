@@ -349,7 +349,6 @@ def configure_x402() -> None:
             ],
             description="Agent VC investment diagnosis report for OKX.AI Agent projects.",
             mime_type="application/json",
-            extensions={"bazaar": bazaar_discovery_extension()},
         )
     }
 
