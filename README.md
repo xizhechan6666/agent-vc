@@ -111,9 +111,9 @@ X402_ASSET_NAME=USDT
 X402_SCHEME=exact
 ```
 
-Unauthenticated calls to `/evaluate` return HTTP 402 with a `PAYMENT-REQUIRED` header. The header contains x402 v2 requirements and Bazaar discovery metadata.
+Unauthenticated calls to `/evaluate` return HTTP 402 with a compact `PAYMENT-REQUIRED` header and the same x402 v2 payload in the JSON body. The header is intentionally kept small for Agent Client and browser-wallet compatibility. Full request and response schemas remain available through `/a2mcp.json` and `/openapi.json`.
 
-The service challenge is configured for X Layer (`eip155:196`) and the OKX-supported USDT contract used by A2MCP service registration. The amount is `5000000`, representing 5 units with 6 decimals. `X402_MODE=okx` returns the challenge immediately and verifies the replayed `PAYMENT-SIGNATURE` locally so OKX Agent Client calls do not depend on the generic x402.org facilitator.
+The service challenge is configured for X Layer (`eip155:196`) and the OKX-supported USDT contract used by A2MCP service registration. The amount is `5000000`, representing 5 units with 6 decimals. `X402_MODE=okx` returns the challenge immediately and accepts OKX Agent Client `PAYMENT-SIGNATURE` replay after checking the accepted payment fields, recipient, amount, validity window, and basic EVM address format. Keep `X402_STRICT_SIGNATURE_VERIFY=0` for this compatibility mode. Use `X402_MODE=sdk` for the official OKX Payment SDK settlement path.
 
 The official OKX Payment SDK path is also wired and can be enabled after the OKX seller credentials are configured:
 

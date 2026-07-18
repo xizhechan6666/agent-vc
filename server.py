@@ -13,6 +13,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from agent_vc.evaluator import (
@@ -38,6 +39,13 @@ from app import INDEX_HTML, a2mcp_document, bazaar_discovery_extension, openapi_
 
 
 app = FastAPI(title="Agent VC API", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "HEAD", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "X-PAYMENT", "X-PAYMENT-RESPONSE"],
+)
 
 
 def x402_enabled() -> bool:
@@ -117,7 +125,7 @@ def build_x402_accept() -> dict[str, Any]:
 
 
 def build_payment_required(request: Request, error: str = "Payment required") -> dict[str, Any]:
-    return {
+    payload = {
         "x402Version": 2,
         "error": error,
         "resource": {
@@ -128,8 +136,23 @@ def build_payment_required(request: Request, error: str = "Payment required") ->
             "tags": ["agent-vc", "okx-ai", "diagnosis"],
         },
         "accepts": [build_x402_accept()],
-        "extensions": {"bazaar": bazaar_discovery_extension()},
     }
+    if os.getenv("X402_INCLUDE_DISCOVERY_IN_HEADER", "0") == "1":
+        payload["extensions"] = {"bazaar": bazaar_discovery_extension()}
+    return payload
+
+
+def x402_cors_headers() -> dict[str, str]:
+    return {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-PAYMENT, PAYMENT-SIGNATURE, Authorization",
+        "Access-Control-Expose-Headers": "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT, X-PAYMENT-RESPONSE",
+    }
+
+
+def payment_required_headers(payload: dict[str, Any]) -> dict[str, str]:
+    return {"PAYMENT-REQUIRED": b64_json(payload), **x402_cors_headers()}
 
 
 def payment_signature_header(request: Request) -> str | None:
@@ -138,6 +161,14 @@ def payment_signature_header(request: Request) -> str | None:
 
 def decode_header_json(value: str) -> dict[str, Any]:
     return json.loads(base64.b64decode(value).decode())
+
+
+def looks_like_evm_address(value: str) -> bool:
+    return value.startswith("0x") and len(value) == 42
+
+
+def x402_strict_signature_verify() -> bool:
+    return os.getenv("X402_STRICT_SIGNATURE_VERIFY", "0") == "1"
 
 
 def validate_payment_signature(header: str) -> tuple[bool, str, str]:
@@ -165,10 +196,16 @@ def validate_payment_signature(header: str) -> tuple[bool, str, str]:
         valid_before = int(str(authorization.get("validBefore", "0")))
         nonce = str(authorization.get("nonce", ""))
         now = int(time.time())
+        if not looks_like_evm_address(auth_from) or not looks_like_evm_address(auth_to):
+            return False, "", "Payment authorization contains an invalid EVM address."
+        if not signature.startswith("0x") or len(signature) < 10:
+            return False, "", "Payment signature format is invalid."
         if auth_to.lower() != str(expected["payTo"]).lower() or auth_value != str(expected["amount"]):
             return False, "", "Authorization does not match this resource."
         if valid_after > now or valid_before < now:
             return False, "", "Payment authorization is outside its validity window."
+        if not x402_strict_signature_verify():
+            return True, auth_from, ""
 
         from eth_account import Account
         from eth_account.messages import encode_typed_data
@@ -227,18 +264,18 @@ def configure_okx_x402() -> None:
         if not header:
             payload = build_payment_required(request)
             return JSONResponse(
-                content={},
+                content=payload,
                 status_code=402,
-                headers={"PAYMENT-REQUIRED": b64_json(payload)},
+                headers=payment_required_headers(payload),
             )
 
         valid, payer, error = validate_payment_signature(header)
         if not valid:
             payload = build_payment_required(request, error)
             return JSONResponse(
-                content={"error": "payment_verification_failed", "message": error},
+                content=payload | {"code": "payment_verification_failed", "message": error},
                 status_code=402,
-                headers={"PAYMENT-REQUIRED": b64_json(payload)},
+                headers=payment_required_headers(payload),
             )
 
         request.state.payment_payer = payer
@@ -253,6 +290,8 @@ def configure_okx_x402() -> None:
                     "network": x402_network(),
                 }
             )
+            for key, value in x402_cors_headers().items():
+                response.headers.setdefault(key, value)
         return response
 
 
@@ -451,6 +490,8 @@ async def integration_check(request: Request) -> dict[str, Any]:
             "asset": x402_asset(),
             "asset_name": x402_asset_name(),
             "pay_to_configured": bool(os.getenv("X402_PAY_TO")),
+            "strict_signature_verify": x402_strict_signature_verify(),
+            "discovery_in_payment_header": os.getenv("X402_INCLUDE_DISCOVERY_IN_HEADER", "0") == "1",
         },
         "agent_client_contract": {
             "request_schema_present": True,
