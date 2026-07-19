@@ -611,7 +611,7 @@ async def schema() -> dict[str, Any]:
 
 
 @app.get("/evaluate")
-async def evaluate_probe(request: Request) -> dict[str, Any] | JSONResponse:
+async def evaluate_probe(request: Request):
     if x402_enabled():
         return payment_probe_response(request)
     return {
