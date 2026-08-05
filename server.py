@@ -438,7 +438,7 @@ def build_intake_response(project: dict[str, Any], answers: list[dict[str, str]]
         "required_answer_count": INTAKE_REQUIRED_ANSWER_COUNT,
         "provided_answer_count": len(answers),
         "missing_information": intake_missing_information(project),
-        "next_step": "请先回答这 3 个问题，然后把同一份 project 和 answers 再提交到 /evaluate。",
+        "next_step": "请把下面 3 个问题一次性回答完，然后把同一份 project 和 answers 再提交到 /evaluate。",
         "questions": questions,
     }
 
@@ -697,7 +697,7 @@ async def evaluate_probe(request: Request):
             "pay_to_configured": bool(os.getenv("X402_PAY_TO")),
         },
         "request_schema": INPUT_SCHEMA,
-        "note": "Send POST /evaluate with a project object. If answers[] are missing, the service returns 3 follow-up questions first and no report is generated. Once answers are present, the paid replay returns the report.",
+        "note": "Send POST /evaluate with a project object. If answers[] are missing, the service returns 3 concise questions in one round and no report is generated. Once answers are present, the paid replay returns the report.",
     }
 
 
@@ -1015,7 +1015,7 @@ async def owner_dashboard() -> str:
             <th>来源</th>
             <th>报告</th>
             <th>提交内容</th>
-            <th>追问回答</th>
+            <th>问答内容</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -1214,7 +1214,7 @@ async def owner_interview(payload: dict[str, Any], request: Request) -> dict[str
         "next_step": "answer_questions",
         "questions": questions.get("questions", []),
         "agent_client_style_message": (
-            "我会先追问 3 个投资人最关心的问题。你回答后，我会生成完整评分、投资结论、"
+            "我会一次性问 3 个最关键的问题。你回答后，我会生成完整评分、投资结论、"
             "改进建议和 HTML 报告链接。"
         ),
     }
@@ -1260,7 +1260,7 @@ async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str,
         {"role": "user", "content": project},
         {
             "role": "agent",
-            "content": "我会先补充 3 个投资人追问，再生成最终投资评估。",
+            "content": "我会一次性问 3 个最关键的问题，帮你补齐写报告所需的信息，再生成最终投资评估。",
             "questions": questions,
         },
     ]
@@ -1270,7 +1270,7 @@ async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str,
             "owner_preview": True,
             "payment_required": False,
             "stage": "questions_ready",
-            "next_step": "POST the same payload with answers[] to /owner/simulate or /owner/evaluate.",
+            "next_step": "POST the same payload with answers[] to /owner/simulate or /owner/evaluate, and answer the 3 questions in one round.",
             "conversation": conversation,
             "questions": questions,
         }

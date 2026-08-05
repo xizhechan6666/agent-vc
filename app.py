@@ -407,7 +407,7 @@ INDEX_HTML = """<!doctype html>
   <div class="landing">
     <div class="landing-panel">
       <h2>让 Agent 创业项目接受一次 VC 式测评</h2>
-      <p>NVC 会像早期投资委员会一样追问项目、评分、给出改进建议，并判断是否进入 100 USDT 早期投资支持候选。</p>
+      <p>NVC 会像早期投资委员会一样一次性收齐关键问题、评分、给出改进建议，并判断是否进入 100 USDT 早期投资支持候选。</p>
       <p>Agent 钱包、已上线产品和链上数据不是必填项，但会作为真实产品验证加分。</p>
       <div class="actions">
         <button type="button" onclick="document.getElementById('assessment').scrollIntoView({behavior:'smooth'})">开始测评</button>
@@ -484,14 +484,14 @@ INDEX_HTML = """<!doctype html>
           <textarea name="differentiation">固定 VC 诊断流程、评分卡、投资候选硬门控和 OKX.AI 生态语境，比通用聊天更适合项目方复盘和传播。</textarea>
         </label>
         <label>融资叙事
-          <textarea name="founder_pitch">OKX.AI 早期 Agent 数据稀缺，项目方更需要被投资人式追问和优化，而不是钱包流水分析。</textarea>
+          <textarea name="founder_pitch">OKX.AI 早期 Agent 数据稀缺，项目方更需要被投资人式问答和优化，而不是钱包流水分析。</textarea>
         </label>
         <label>已知风险
           <textarea name="risks">报告质量依赖 prompt 和模型；投资候选需要严格控制比例。</textarea>
         </label>
         </details>
         <div class="actions">
-          <button type="button" id="interviewBtn">生成追问</button>
+          <button type="button" id="interviewBtn">生成 3 个问题</button>
           <button type="button" id="evaluateBtn">查看两步评估方式</button>
           <button type="button" class="secondary" id="clearBtn">清空回答</button>
         </div>
@@ -504,7 +504,7 @@ INDEX_HTML = """<!doctype html>
         <span class="message" id="runState">ready</span>
       </div>
       <div class="output">
-        <div id="output" class="report-host">点击“生成追问”或“查看两步评估方式”。</div>
+        <div id="output" class="report-host">点击“生成 3 个问题”或“查看两步评估方式”。</div>
       </div>
     </section>
   </main>
@@ -731,7 +731,7 @@ INDEX_HTML = """<!doctype html>
         <div class="report-card">
           <div class="report-hero">
             <h3>完整投资评估报告需要先完成问答，再通过 Agent Client 付费生成</h3>
-            <p>网页端用于了解产品和整理项目信息；如果没有 answers，POST /evaluate 会先返回 3 个追问。完整研报、入库和 100 USDT 支持筛选只在补齐答案后的付费 Agent Client 调用里完成。</p>
+            <p>网页端用于了解产品和整理项目信息；如果没有 answers，POST /evaluate 会先返回 3 个一次性问题。完整研报、入库和 100 USDT 支持筛选只在补齐答案后的付费 Agent Client 调用里完成。</p>
             <div class="badge-row">
               <span class="badge">两步端点 POST /evaluate</span>
               <span class="badge">问答后再 x402 支付 5 USDT</span>
@@ -864,7 +864,7 @@ def evaluate_request_schema() -> dict[str, Any]:
             },
             "answers": {
                 "type": "array",
-                "description": "Optional answers to follow-up investor questions. When missing or incomplete, POST /evaluate returns the follow-up questions first and does not generate the report yet.",
+                "description": "Optional answers to the 3 one-round intake questions. When missing or incomplete, POST /evaluate returns the questions first and does not generate the report yet.",
                 "items": {
                     "type": "object",
                     "required": ["question", "answer"],
@@ -1037,7 +1037,7 @@ def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
                     "responses": {
                         "200": {
                             "description": (
-                                "Either a free intake payload with 3 follow-up questions or a structured JSON report "
+                                "Either a free intake payload with 3 concise questions or a structured JSON report "
                                 "plus a paid HTML report_url at /agent/reports/{report_token}."
                             )
                         },
@@ -1075,7 +1075,7 @@ def a2mcp_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         "service": {
             "serviceName": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
             "serviceDescription": (
-                "① `/evaluate` 会先对缺失的项目资料生成 3 个追问，帮助用户补齐关键信息。\n"
+                "① `/evaluate` 会先对缺失的项目资料生成 3 个一次性问题，帮助用户补齐关键信息。\n"
                 "② 用户回答后，付费 Agent Client 再提交同一份 project + answers，触发 x402 并生成最终投资诊断。\n"
                 "③ 最终返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。"
             ),
