@@ -40,7 +40,7 @@ Agent VC has two separate surfaces:
    - `POST /evaluate`.
    - Protected by x402 when `X402_ENABLED=1`.
    - Generates the real JSON report.
-   - Writes the evaluation to Supabase Postgres in production.
+   - Writes the evaluation to Render Postgres in production.
    - Applies duplicate checks and quota gating.
    - Returns `report_url` pointing to `/agent/reports/{report_token}`.
 
@@ -171,7 +171,7 @@ Behavior:
 
 ## Candidate Database and Export
 
-Each completed evaluation is saved to Supabase Postgres in production. The row contains the raw project submission, follow-up answers, payer wallet when x402 provides it, contact hint, score, recommendation, investment gate result, duplicate flag, source, and report URL.
+Each completed evaluation is saved to Render Postgres in production. The row contains the raw project submission, follow-up answers, payer wallet when x402 provides it, contact hint, score, recommendation, investment gate result, duplicate flag, source, and report URL.
 
 Owner-only dashboard:
 
@@ -213,7 +213,7 @@ DATABASE_URL=postgresql://...
 DATABASE_SSLMODE=require
 ```
 
-Supabase and Render Postgres both work. Keep `DATABASE_URL` private and do not commit it.
+Keep `DATABASE_URL` private and do not commit it. Render injects the production value from the `agent-vc-db` Postgres resource.
 
 Confirm the deployed service is using durable storage:
 
@@ -234,7 +234,7 @@ The response should include:
 
 If it still shows `sqlite`, new reports can still disappear after redeploys.
 
-Current production state is Supabase Postgres through the Supabase Transaction pooler. Do not use the Supabase direct connection URL on Render; use the pooler URL on port `6543`.
+Current production state is Render Postgres through the `agent-vc-db` resource. Do not hardcode the URL into the repo; Render injects it into the service environment via the Blueprint.
 
 ## Verification Commands
 

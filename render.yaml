@@ -56,7 +56,9 @@ services:
       - key: DB_SYNC_SECRET
         sync: false
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: agent-vc-db
+          property: connectionString
       - key: DATABASE_SSLMODE
         value: require
       - key: DEMO_EVALUATE_ENABLED

@@ -272,7 +272,7 @@ Do not commit `OWNER_ACCESS_TOKEN`. Set it only in the deployment environment.
 
 ## Candidate Database
 
-Every completed `/evaluate` and `/owner/evaluate` call is saved to durable Supabase Postgres in production. Local SQLite is only a development fallback when `DATABASE_URL` is not configured.
+Every completed `/evaluate` and `/owner/evaluate` call is saved to durable Render Postgres in production. Local SQLite is only a development fallback when `DATABASE_URL` is not configured or the primary database is unreachable.
 
 Saved fields include:
 
@@ -305,12 +305,12 @@ The optional `DB_SYNC_WEBHOOK_URL` hook can still mirror rows to Google Sheets, 
 
 ### Durable Report Storage
 
-Production is configured for Supabase Postgres through `DATABASE_URL`. Without it, the app falls back to local SQLite, which can disappear when a free Render instance restarts or redeploys.
+Production is configured for Render Postgres through `DATABASE_URL`. Without it, the app falls back to local SQLite, which can disappear when a free Render instance restarts or redeploys.
 
 Recommended setup:
 
-1. Create a Supabase project or Render Postgres database.
-2. Copy its Postgres connection string.
+1. Use the Render Postgres database named `agent-vc-db`, or create an equivalent Postgres database in the same workspace.
+2. Let Render inject `DATABASE_URL` from the database resource through `render.yaml`.
 3. Set these Render environment variables:
 
 ```bash

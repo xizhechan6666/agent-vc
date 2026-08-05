@@ -60,7 +60,7 @@ Keep API keys and owner tokens in environment variables only. On Render, `LLM_AP
 uvicorn server:app --host 0.0.0.0 --port 8787
 ```
 
-The included Render plan is `free`, so the service can still sleep when idle. Production report and candidate data should use Supabase Postgres through `DATABASE_URL`; local SQLite is only a development fallback.
+The included Render plan is `free`, so the service can still sleep when idle. Production report and candidate data should use Render Postgres through `DATABASE_URL`; local SQLite is only a development fallback.
 
 ## OKX.AI A2MCP Registration
 
