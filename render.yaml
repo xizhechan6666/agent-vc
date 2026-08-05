@@ -3,6 +3,8 @@ services:
     name: agent-vc
     runtime: docker
     plan: free
+    branch: main
+    autoDeployTrigger: commit
     healthCheckPath: /health
     envVars:
       - key: LLM_API_KEY
