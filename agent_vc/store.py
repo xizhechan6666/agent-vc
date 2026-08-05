@@ -15,6 +15,40 @@ from typing import Any
 
 
 JsonDict = dict[str, Any]
+_PRIMARY_STORAGE_UNAVAILABLE = False
+_PRIMARY_STORAGE_ERROR: dict[str, str] | None = None
+
+
+def _storage_status(
+    *,
+    configured: bool,
+    primary_backend: str,
+    effective_backend: str,
+    primary_ok: bool,
+    effective_ok: bool,
+    fallback_used: bool,
+    error_type: str | None = None,
+    error: str | None = None,
+    evaluations_count: int | None = None,
+) -> dict[str, Any]:
+    status: dict[str, Any] = {
+        "backend": effective_backend,
+        "configured_backend": primary_backend,
+        "durable": effective_backend == "postgres",
+        "database_url_configured": configured,
+        "ok": effective_ok,
+        "primary_backend": primary_backend,
+        "primary_ok": primary_ok,
+        "effective_backend": effective_backend,
+        "fallback_used": fallback_used,
+    }
+    if error_type:
+        status["error_type"] = error_type
+    if error:
+        status["error"] = error
+    if evaluations_count is not None:
+        status["evaluations_count"] = evaluations_count
+    return status
 
 
 def database_url() -> str:
@@ -26,22 +60,36 @@ def storage_backend() -> str:
 
 
 def storage_health() -> dict[str, Any]:
-    backend = storage_backend()
-    result: dict[str, Any] = {
-        "backend": backend,
-        "durable": backend == "postgres",
-        "database_url_configured": bool(database_url()),
-        "ok": False,
-    }
     try:
-        with connect() as conn:
+        conn, status = _connect_with_fallback()
+        try:
             row = conn.execute("SELECT COUNT(*) AS c FROM evaluations").fetchone()
-            result["ok"] = True
-            result["evaluations_count"] = int(row["c"])
+            return _storage_status(
+                configured=status["database_url_configured"],
+                primary_backend=status["primary_backend"],
+                effective_backend=status["effective_backend"],
+                primary_ok=status["primary_ok"],
+                effective_ok=True,
+                fallback_used=status["fallback_used"],
+                error_type=status.get("error_type"),
+                error=status.get("error"),
+                evaluations_count=int(row["c"]),
+            )
+        finally:
+            conn.close()
     except Exception as exc:
-        result["error_type"] = exc.__class__.__name__
-        result["error"] = _safe_error(str(exc))
-    return result
+        configured = bool(database_url())
+        backend = "postgres" if configured else "sqlite"
+        return _storage_status(
+            configured=configured,
+            primary_backend=backend,
+            effective_backend=backend,
+            primary_ok=False,
+            effective_ok=False,
+            fallback_used=False,
+            error_type=exc.__class__.__name__,
+            error=_safe_error(str(exc)),
+        )
 
 
 def _safe_error(message: str) -> str:
@@ -66,23 +114,29 @@ def sql(conn: Any, statement: str) -> str:
 
 
 def connect() -> Any:
+    conn, _ = _connect_with_fallback()
+    return conn
+
+
+def _connect_postgres() -> Any:
     dsn = database_url()
-    if dsn:
-        try:
-            import psycopg
-            from psycopg.rows import dict_row
-        except ModuleNotFoundError as exc:
-            raise RuntimeError("DATABASE_URL is set but psycopg is not installed") from exc
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("DATABASE_URL is set but psycopg is not installed") from exc
 
-        kwargs: dict[str, Any] = {"row_factory": dict_row}
-        sslmode = os.getenv("DATABASE_SSLMODE", "").strip()
-        if sslmode:
-            kwargs["sslmode"] = sslmode
-        conn = psycopg.connect(dsn, **kwargs)
-        _init_postgres(conn)
-        conn.commit()
-        return conn
+    kwargs: dict[str, Any] = {"row_factory": dict_row}
+    sslmode = os.getenv("DATABASE_SSLMODE", "").strip()
+    if sslmode:
+        kwargs["sslmode"] = sslmode
+    conn = psycopg.connect(dsn, **kwargs)
+    _init_postgres(conn)
+    conn.commit()
+    return conn
 
+
+def _connect_sqlite() -> sqlite3.Connection:
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
@@ -90,6 +144,71 @@ def connect() -> Any:
     _init_sqlite(conn)
     conn.commit()
     return conn
+
+
+def _connect_with_fallback() -> tuple[Any, dict[str, Any]]:
+    global _PRIMARY_STORAGE_UNAVAILABLE, _PRIMARY_STORAGE_ERROR
+    dsn = database_url()
+    configured = bool(dsn)
+    if dsn and not _PRIMARY_STORAGE_UNAVAILABLE:
+        try:
+            conn = _connect_postgres()
+            return conn, _storage_status(
+                configured=True,
+                primary_backend="postgres",
+                effective_backend="postgres",
+                primary_ok=True,
+                effective_ok=True,
+                fallback_used=False,
+            )
+        except Exception as exc:
+            postgres_error_type = exc.__class__.__name__
+            postgres_error = _safe_error(str(exc))
+            _PRIMARY_STORAGE_UNAVAILABLE = True
+            _PRIMARY_STORAGE_ERROR = {
+                "type": postgres_error_type,
+                "message": postgres_error,
+            }
+            try:
+                conn = _connect_sqlite()
+                return conn, _storage_status(
+                    configured=True,
+                    primary_backend="postgres",
+                    effective_backend="sqlite",
+                    primary_ok=False,
+                    effective_ok=True,
+                    fallback_used=True,
+                    error_type=postgres_error_type,
+                    error=postgres_error,
+                )
+            except Exception as sqlite_exc:
+                raise RuntimeError(
+                    f"Postgres connection failed: {postgres_error}; fallback sqlite failed: {_safe_error(str(sqlite_exc))}"
+                ) from sqlite_exc
+
+    if dsn and _PRIMARY_STORAGE_UNAVAILABLE:
+        cached_error = _PRIMARY_STORAGE_ERROR or {"type": "OperationalError", "message": "primary storage unavailable"}
+        conn = _connect_sqlite()
+        return conn, _storage_status(
+            configured=True,
+            primary_backend="postgres",
+            effective_backend="sqlite",
+            primary_ok=False,
+            effective_ok=True,
+            fallback_used=True,
+            error_type=cached_error["type"],
+            error=cached_error["message"],
+        )
+
+    conn = _connect_sqlite()
+    return conn, _storage_status(
+        configured=configured,
+        primary_backend="sqlite",
+        effective_backend="sqlite",
+        primary_ok=True,
+        effective_ok=True,
+        fallback_used=False,
+    )
 
 
 def _init_sqlite(conn: sqlite3.Connection) -> None:
