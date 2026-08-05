@@ -40,7 +40,7 @@ OWNER_ACCESS_TOKEN=<private random token, Render env only>
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
 X402_PRICE=5
-X402_MODE=okx
+X402_MODE=sdk
 X402_NETWORK=eip155:196
 X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
 X402_ASSET_NAME=USDT
@@ -77,7 +77,7 @@ Current registration values:
 ```json
 {
   "serviceName": "Agent VC Investment Diagnosis",
-  "serviceDescription": "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n③ 网页端用于产品介绍和项目信息整理；完整研报、入库和 100 USDT 支持筛选仅通过付费 Agent Client 端点完成。",
+  "serviceDescription": "① `/evaluate` 先对缺失的项目资料生成 3 个追问，帮助用户补齐关键信息。\n② 用户回答后，付费 Agent Client 再提交同一份 project + answers，触发 x402 并生成最终投资诊断。\n③ 最终返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。",
   "serviceType": "A2MCP",
   "fee": "5",
   "endpoint": "https://agent-vc-4a3m.onrender.com/evaluate"
@@ -98,14 +98,18 @@ curl -i -X POST https://agent-vc-4a3m.onrender.com/evaluate \
 
 Expected response:
 
-- HTTP 402.
-- `PAYMENT-REQUIRED` header exists.
-- Decoded payload uses `x402Version: 2`.
-- `accepts[0].network` is `eip155:196`.
-- `accepts[0].asset` is `0x779ded0c9e1022225f8e0630b35a9b54be713736`.
-- `accepts[0].amount` is `5000000`.
-- `extensions.bazaar.info.input.method` is `POST`.
-- `extensions.bazaar.info.input.body.required` contains `project`.
+- If `answers[]` are missing or incomplete:
+  - HTTP 200.
+  - The body contains `mode: "intake"` and 3 follow-up questions.
+- If `answers[]` are present and payment is still unpaid:
+  - HTTP 402.
+  - `PAYMENT-REQUIRED` header exists.
+  - Decoded payload uses `x402Version: 2`.
+  - `accepts[0].network` is `eip155:196`.
+  - `accepts[0].asset` is `0x779ded0c9e1022225f8e0630b35a9b54be713736`.
+  - `accepts[0].amount` is `5000000`.
+  - `extensions.bazaar.info.input.method` is `POST`.
+  - `extensions.bazaar.info.input.body.required` contains `project`.
 
 After user confirmation, the Agent Client signs the x402 payment and replays the same request with the returned payment authorization header. The server then returns the report JSON and stores the evaluation.
 
@@ -122,10 +126,10 @@ It can:
 Production boundaries:
 
 - Complete investment reports are generated only through the paid Agent Client endpoint.
-- Production investment database writes happen only after a valid paid `/evaluate` call.
+- Production investment database writes happen only after a valid paid `/evaluate` call with completed intake answers.
 - Owner preview can generate private test reports through `/owner/*`, but those rows are marked as preview and excluded from public quota counting.
 - 100 USDT support quota decisions for users happen only in the paid endpoint.
-- x402 remains the required payment gate for production report generation.
+- x402 remains the required payment gate for production report generation after the intake step.
 
 `/demo/evaluate` is restricted by default and returns 403.
 
@@ -139,7 +143,7 @@ X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
 X402_ASSET_NAME=USDT
 ```
 
-The x402 challenge is intentionally aligned with the OKX.AI service registration: X Layer (`eip155:196`) and USDT (`0x779ded0c9e1022225f8e0630b35a9b54be713736`). Keep `X402_MODE=okx` unless an OKX-supported external facilitator URL is provided.
+The x402 challenge is intentionally aligned with the OKX.AI service registration: X Layer (`eip155:196`) and USDT (`0x779ded0c9e1022225f8e0630b35a9b54be713736`). Keep `X402_MODE=sdk` for the production OKX facilitator path unless a different supported facilitator URL is provided.
 
 ## Local Verification
 
@@ -151,7 +155,7 @@ The x402 challenge is intentionally aligned with the OKX.AI service registration
 X402_ENABLED=1 \
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c \
 X402_PRICE=5 \
-X402_MODE=okx \
+X402_MODE=sdk \
 X402_NETWORK=eip155:196 \
 X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736 \
 .venv/bin/python - <<'PY'
@@ -169,6 +173,7 @@ r = c.post('/evaluate', json={
     }
 })
 print(r.status_code)
+print(r.json().get('mode'))
 raw = r.headers.get('payment-required')
 print(bool(raw))
 if raw:

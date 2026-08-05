@@ -25,7 +25,7 @@ from agent_vc.evaluator import (
     project_fingerprint,
     submitter_key,
 )
-from agent_vc.prompt import INPUT_SCHEMA, REPORT_SCHEMA_HINT
+from agent_vc.prompt import INPUT_SCHEMA
 from agent_vc.store import connect, duplicate_today, get_evaluation, get_evaluation_by_token, save_evaluation
 from agent_vc.sync import sync_evaluation
 
@@ -492,7 +492,7 @@ INDEX_HTML = """<!doctype html>
         </details>
         <div class="actions">
           <button type="button" id="interviewBtn">生成追问</button>
-          <button type="button" id="evaluateBtn">查看付费生成方式</button>
+          <button type="button" id="evaluateBtn">查看两步评估方式</button>
           <button type="button" class="secondary" id="clearBtn">清空回答</button>
         </div>
       </form>
@@ -504,7 +504,7 @@ INDEX_HTML = """<!doctype html>
         <span class="message" id="runState">ready</span>
       </div>
       <div class="output">
-        <div id="output" class="report-host">点击“生成追问”或“查看付费生成方式”。</div>
+        <div id="output" class="report-host">点击“生成追问”或“查看两步评估方式”。</div>
       </div>
     </section>
   </main>
@@ -711,7 +711,7 @@ INDEX_HTML = """<!doctype html>
         runState.textContent = '正在生成补充问题…';
         const body = await postJson('/interview', { project: projectFromForm() });
         renderQuestions(body.questions || []);
-        output.innerHTML = '<p class="message">补充问题已生成。完整投资评估报告需要通过 Agent Client 付费调用生成。</p>';
+        output.innerHTML = '<p class="message">补充问题已生成。先回答这些问题，再提交同一份项目资料，系统才会进入付费评估并生成完整报告。</p>';
         runState.textContent = '补充问题已生成';
       } catch (error) {
         output.innerHTML = `<span class="error">${error.message}</span>`;
@@ -730,11 +730,11 @@ INDEX_HTML = """<!doctype html>
       output.innerHTML = `
         <div class="report-card">
           <div class="report-hero">
-            <h3>完整投资评估报告需要通过 Agent Client 付费生成</h3>
-            <p>网页端用于了解产品和整理项目信息；完整研报、入库和 100 USDT 支持筛选仅通过付费 Agent Client 端点完成。</p>
+            <h3>完整投资评估报告需要先完成问答，再通过 Agent Client 付费生成</h3>
+            <p>网页端用于了解产品和整理项目信息；如果没有 answers，POST /evaluate 会先返回 3 个追问。完整研报、入库和 100 USDT 支持筛选只在补齐答案后的付费 Agent Client 调用里完成。</p>
             <div class="badge-row">
-              <span class="badge">付费端点 POST /evaluate</span>
-              <span class="badge">x402 支付 5 USDT</span>
+              <span class="badge">两步端点 POST /evaluate</span>
+              <span class="badge">问答后再 x402 支付 5 USDT</span>
               <span class="badge">返回独立报告链接</span>
             </div>
           </div>
@@ -864,7 +864,7 @@ def evaluate_request_schema() -> dict[str, Any]:
             },
             "answers": {
                 "type": "array",
-                "description": "Optional answers to follow-up investor questions.",
+                "description": "Optional answers to follow-up investor questions. When missing or incomplete, POST /evaluate returns the follow-up questions first and does not generate the report yet.",
                 "items": {
                     "type": "object",
                     "required": ["question", "answer"],
@@ -879,11 +879,45 @@ def evaluate_request_schema() -> dict[str, Any]:
     }
 
 
-def evaluate_output_schema() -> dict[str, Any]:
+def evaluate_intake_schema() -> dict[str, Any]:
     return {
         "type": "object",
-        "required": ["request_id", "report_token", "report_url", "investment_gate", "client_summary", "report"],
+        "required": ["mode", "needs_more_info", "questions", "next_step"],
         "properties": {
+            "mode": {"const": "intake"},
+            "needs_more_info": {"const": True},
+            "payment_required": {"type": "boolean"},
+            "owner_preview": {"type": "boolean"},
+            "required_answer_count": {"type": "integer"},
+            "provided_answer_count": {"type": "integer"},
+            "missing_information": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "next_step": {"type": "string"},
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["id", "question", "why_it_matters"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "question": {"type": "string"},
+                        "why_it_matters": {"type": "string"},
+                    },
+                },
+            },
+        },
+    }
+
+
+def evaluate_report_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["mode", "needs_more_info", "request_id", "report_token", "report_url", "investment_gate", "client_summary", "report"],
+        "properties": {
+            "mode": {"const": "report"},
+            "needs_more_info": {"const": False},
             "request_id": {"type": "integer"},
             "report_token": {"type": "string"},
             "report_url": {"type": "string", "description": "Paid HTML report URL for this evaluation."},
@@ -904,6 +938,15 @@ def evaluate_output_schema() -> dict[str, Any]:
             "sync": {"type": "object"},
             "report": {"type": "object"},
         },
+    }
+
+
+def evaluate_output_schema() -> dict[str, Any]:
+    return {
+        "oneOf": [
+            evaluate_intake_schema(),
+            evaluate_report_schema(),
+        ]
     }
 
 
@@ -981,7 +1024,7 @@ def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         "paths": {
             "/evaluate": {
                 "post": {
-                    "summary": "Generate an Agent VC investment diagnosis report.",
+                    "summary": "Generate intake questions first, then an Agent VC investment diagnosis report.",
                     "operationId": "evaluateAgentProject",
                     "requestBody": {
                         "required": True,
@@ -994,8 +1037,8 @@ def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
                     "responses": {
                         "200": {
                             "description": (
-                                "Structured JSON report plus a paid HTML report_url at "
-                                "/agent/reports/{report_token}."
+                                "Either a free intake payload with 3 follow-up questions or a structured JSON report "
+                                "plus a paid HTML report_url at /agent/reports/{report_token}."
                             )
                         },
                         "400": {"description": "Invalid request."},
@@ -1032,9 +1075,9 @@ def a2mcp_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
         "service": {
             "serviceName": os.getenv("SERVICE_NAME", "Agent VC Investment Diagnosis"),
             "serviceDescription": (
-                "① 通过 x402 付费后，对 OKX.AI Agent 项目进行 VC 式追问、评分和投资委员会诊断。\n"
-                "② 返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。\n"
-                "③ 网页端用于产品介绍和项目信息整理；完整研报、入库和 100 USDT 支持筛选仅通过付费 Agent Client 端点完成。"
+                "① `/evaluate` 会先对缺失的项目资料生成 3 个追问，帮助用户补齐关键信息。\n"
+                "② 用户回答后，付费 Agent Client 再提交同一份 project + answers，触发 x402 并生成最终投资诊断。\n"
+                "③ 最终返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。"
             ),
             "serviceType": "A2MCP",
             "fee": os.getenv("SERVICE_FEE_USDT", "5"),
@@ -1479,10 +1522,10 @@ class AgentVCHandler(BaseHTTPRequestHandler):
                 200,
                 {
                     "input": INPUT_SCHEMA,
-                    "output": REPORT_SCHEMA_HINT,
+                    "output": evaluate_output_schema(),
                     "endpoints": {
                         "POST /interview": "Generate VC questions from project input.",
-                        "POST /evaluate": "Return VC report JSON and apply hard investment quota gate.",
+                        "POST /evaluate": "Return intake questions first when answers are missing, then the paid VC report after answers are supplied.",
                     },
                 },
             )

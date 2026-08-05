@@ -24,7 +24,7 @@ from agent_vc.evaluator import (
     project_fingerprint,
     submitter_key,
 )
-from agent_vc.prompt import INPUT_SCHEMA, REPORT_SCHEMA_HINT
+from agent_vc.prompt import INPUT_SCHEMA
 from agent_vc.store import (
     connect,
     duplicate_today,
@@ -35,7 +35,14 @@ from agent_vc.store import (
     storage_health,
 )
 from agent_vc.sync import sync_evaluation
-from app import INDEX_HTML, a2mcp_document, bazaar_discovery_extension, openapi_document, report_page
+from app import (
+    INDEX_HTML,
+    a2mcp_document,
+    bazaar_discovery_extension,
+    evaluate_output_schema,
+    openapi_document,
+    report_page,
+)
 
 
 app = FastAPI(title="Agent VC API", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
@@ -375,6 +382,67 @@ async def payment_header_exposure_middleware(request: Request, call_next: Any) -
     return response
 
 
+@app.middleware("http")
+async def evaluation_intake_middleware(request: Request, call_next: Any) -> Response:
+    if request.url.path == "/evaluate" and request.method.upper() == "POST":
+        raw_body = await request.body()
+        if not raw_body.strip():
+            payload: dict[str, Any] = {}
+        else:
+            try:
+                decoded = json.loads(raw_body.decode("utf-8"))
+            except json.JSONDecodeError as exc:
+                raise HTTPException(status_code=400, detail="invalid_json") from exc
+            if not isinstance(decoded, dict):
+                raise HTTPException(status_code=400, detail="JSON body must be an object")
+            payload = decoded
+
+        project, answers = normalize_evaluation_payload(payload)
+        if len(answers) < INTAKE_REQUIRED_ANSWER_COUNT:
+            return JSONResponse(content=build_intake_response(project, answers), status_code=200)
+
+    return await call_next(request)
+
+
+INTAKE_REQUIRED_ANSWER_COUNT = 3
+
+
+def _has_text(value: Any) -> bool:
+    return bool(str(value or "").strip())
+
+
+def intake_missing_information(project: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    if not _has_text(project.get("target_user")):
+        missing.append("目标用户")
+    if not _has_text(project.get("problem")):
+        missing.append("核心问题")
+    if not _has_text(project.get("solution")):
+        missing.append("解决方案")
+    if not any(_has_text(project.get(key)) for key in ("agent_url", "product_url", "website")):
+        missing.append("项目链接或 Agent URL")
+    if not any(_has_text(project.get(key)) for key in ("traction", "onchain_evidence", "wallet_address", "agent_wallet_address")):
+        missing.append("真实使用或验证证据")
+    if not _has_text(project.get("pricing")):
+        missing.append("定价")
+    return missing[:5]
+
+
+def build_intake_response(project: dict[str, Any], answers: list[dict[str, str]], *, owner_preview: bool = False) -> dict[str, Any]:
+    questions = generate_interview(project).get("questions", [])
+    return {
+        "mode": "intake",
+        "needs_more_info": True,
+        "payment_required": False,
+        "owner_preview": owner_preview,
+        "required_answer_count": INTAKE_REQUIRED_ANSWER_COUNT,
+        "provided_answer_count": len(answers),
+        "missing_information": intake_missing_information(project),
+        "next_step": "请先回答这 3 个问题，然后把同一份 project 和 answers 再提交到 /evaluate。",
+        "questions": questions,
+    }
+
+
 def absolute_url(request: Request, path: str) -> str:
     public_base = os.getenv("PUBLIC_BASE_URL")
     if public_base:
@@ -602,10 +670,10 @@ async def head_health() -> JSONResponse:
 async def schema() -> dict[str, Any]:
     return {
         "input": INPUT_SCHEMA,
-        "output": REPORT_SCHEMA_HINT,
+        "output": evaluate_output_schema(),
         "endpoints": {
             "POST /interview": "Generate VC questions from project input.",
-            "POST /evaluate": "Return VC report JSON and apply hard investment quota gate.",
+            "POST /evaluate": "Return intake questions first when answers are missing, then the paid VC report after answers are supplied.",
         },
     }
 
@@ -629,7 +697,7 @@ async def evaluate_probe(request: Request):
             "pay_to_configured": bool(os.getenv("X402_PAY_TO")),
         },
         "request_schema": INPUT_SCHEMA,
-        "note": "Send POST /evaluate with a project object. Paid calls receive HTTP 402 first and return a report after payment replay.",
+        "note": "Send POST /evaluate with a project object. If answers[] are missing, the service returns 3 follow-up questions first and no report is generated. Once answers are present, the paid replay returns the report.",
     }
 
 
@@ -684,6 +752,8 @@ async def integration_check(request: Request) -> dict[str, Any]:
         "agent_client_contract": {
             "request_schema_present": True,
             "output_schema_present": True,
+            "returns_follow_up_questions": True,
+            "requires_answers_before_report": True,
             "returns_report_url": True,
             "returns_chat_summary": True,
             "returns_result_first_message": True,
@@ -792,6 +862,8 @@ def run_evaluation(payload: dict[str, Any], request: Request, *, owner_preview: 
     )
 
     return {
+        "mode": "report",
+        "needs_more_info": False,
         "request_id": request_id,
         "report_token": report_token,
         "report_url": paid_report_url,
@@ -1150,12 +1222,18 @@ async def owner_interview(payload: dict[str, Any], request: Request) -> dict[str
 
 @app.post("/evaluate")
 async def evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    project, answers = normalize_evaluation_payload(payload)
+    if len(answers) < INTAKE_REQUIRED_ANSWER_COUNT:
+        return build_intake_response(project, answers)
     return run_evaluation(payload, request)
 
 
 @app.post("/owner/evaluate")
 async def owner_evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     require_owner(request)
+    project, answers = normalize_evaluation_payload(payload)
+    if len(answers) < INTAKE_REQUIRED_ANSWER_COUNT:
+        return build_intake_response(project, answers, owner_preview=True)
     result = run_evaluation(payload, request, owner_preview=True)
     result["owner_note"] = "Owner preview call: x402 skipped, saved for report preview, excluded from public quota counting."
     return result
@@ -1225,4 +1303,7 @@ async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str,
 async def demo_evaluate(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     if os.getenv("DEMO_EVALUATE_ENABLED", "0") != "1":
         raise HTTPException(status_code=403, detail="完整研报、入库和 100 USDT 支持筛选仅通过 Agent Client 付费调用 /evaluate 完成。")
+    project, answers = normalize_evaluation_payload(payload)
+    if len(answers) < INTAKE_REQUIRED_ANSWER_COUNT:
+        return build_intake_response(project, answers)
     return run_evaluation(payload, request)

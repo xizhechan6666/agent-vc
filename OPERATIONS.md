@@ -38,7 +38,8 @@ Agent VC has two separate surfaces:
 
 2. Paid Agent Client endpoint
    - `POST /evaluate`.
-   - Protected by x402 when `X402_ENABLED=1`.
+   - Returns a free intake response first when `answers[]` are missing or incomplete.
+   - Protected by x402 only for the final report replay after the intake is complete.
    - Generates the real JSON report.
    - Writes the evaluation to Render Postgres in production.
    - Applies duplicate checks and quota gating.
@@ -53,15 +54,19 @@ Use A2MCP, not A2A, for this product. This is a fixed-price report service, not 
 Expected flow:
 
 1. Agent Client sends `POST /evaluate` with a JSON body matching `inputSchema`.
-2. Server returns HTTP 402 when no valid payment proof is present.
-3. The 402 response includes `PAYMENT-REQUIRED` with x402 v2 requirements and Bazaar discovery metadata.
-4. Agent Client asks the user to confirm payment through **OKX Agent Payments Protocol**.
-5. After payment signing, Agent Client replays the same request with the returned payment authorization header.
-6. Server verifies payment, runs the evaluator, saves the report, and returns JSON.
-7. Agent Client can display `client_summary` in chat and give the user `report_url` for the full HTML report.
+2. If `answers[]` are missing or incomplete, the server returns a free intake payload with 3 follow-up questions and no payment challenge.
+3. The founder answers those questions and the Agent Client resubmits the same project with `answers[]`.
+4. The final `POST /evaluate` call returns HTTP 402 when no valid payment proof is present.
+5. The 402 response includes `PAYMENT-REQUIRED` with x402 v2 requirements and Bazaar discovery metadata.
+6. Agent Client asks the user to confirm payment through **OKX Agent Payments Protocol**.
+7. After payment signing, Agent Client replays the same request with the returned payment authorization header.
+8. Server verifies payment, runs the evaluator, saves the report, and returns JSON.
+9. Agent Client can display `client_summary` in chat and give the user `report_url` for the full HTML report.
 
 The returned JSON includes:
 
+- `mode`
+- `needs_more_info`
 - `request_id`
 - `report_token`
 - `report_url`
@@ -119,14 +124,14 @@ Current working x402 config:
 
 ```bash
 X402_PRICE=5
-X402_MODE=okx
+X402_MODE=sdk
 X402_NETWORK=eip155:196
 X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
 X402_ASSET_NAME=USDT
 X402_SCHEME=exact
 ```
 
-The payment challenge must match the OKX.AI A2MCP service registration: X Layer (`eip155:196`) and USDT (`0x779ded0c9e1022225f8e0630b35a9b54be713736`). `X402_MODE=okx` returns the 402 challenge directly and verifies the replayed `PAYMENT-SIGNATURE` locally. This avoids the generic x402.org facilitator, which does not support `eip155:196`.
+The payment challenge must match the OKX.AI A2MCP service registration: X Layer (`eip155:196`) and USDT (`0x779ded0c9e1022225f8e0630b35a9b54be713736`). `X402_MODE=sdk` uses the official OKX facilitator path for the final paid replay. The free intake step happens before payment and does not emit a payment challenge.
 
 ## Required Environment Variables
 
@@ -138,7 +143,7 @@ SERVICE_FEE_USDT=5
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
 X402_PRICE=5
-X402_MODE=okx
+X402_MODE=sdk
 X402_NETWORK=eip155:196
 X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
 X402_ASSET_NAME=USDT
@@ -254,12 +259,16 @@ curl -i -X POST https://agent-vc-4a3m.onrender.com/evaluate \
 
 Expected result:
 
-- HTTP 402.
-- `PAYMENT-REQUIRED` header exists.
-- Decoded payload has `x402Version: 2`.
-- `accepts[0].amount` is `5000000`.
-- `accepts[0].network` is `eip155:196`.
-- `accepts[0].asset` is `0x779ded0c9e1022225f8e0630b35a9b54be713736`.
-- `extensions.bazaar.info.input.method` is `POST`.
+- If `answers[]` are missing or incomplete:
+  - HTTP 200.
+  - The body includes `mode: "intake"` and 3 follow-up questions.
+- If `answers[]` are present and no payment proof is supplied:
+  - HTTP 402.
+  - `PAYMENT-REQUIRED` header exists.
+  - Decoded payload has `x402Version: 2`.
+  - `accepts[0].amount` is `5000000`.
+  - `accepts[0].network` is `eip155:196`.
+  - `accepts[0].asset` is `0x779ded0c9e1022225f8e0630b35a9b54be713736`.
+  - `extensions.bazaar.info.input.method` is `POST`.
 
 Real-payment replay is performed from a supported Agent Client with an authenticated Agentic Wallet and sufficient supported stablecoin balance.

@@ -14,10 +14,11 @@ https://agent-vc-4a3m.onrender.com
 
 1. A founder or Agent Client submits an Agent project.
 2. `/interview` can generate three investor follow-up questions.
-3. The paid Agent Client calls `/evaluate`.
-4. x402 returns HTTP 402 until the caller pays through **OKX Agent Payments Protocol**.
-5. After payment replay, the service generates the real report, stores it, applies duplicate and quota rules, and returns JSON plus `report_url`.
-6. The user reads the full HTML report at `/agent/reports/{report_token}`.
+3. `POST /evaluate` first returns a free intake payload with 3 follow-up questions when `answers[]` are missing or incomplete.
+4. The founder answers those questions and the Agent Client submits the same project again with `answers[]`.
+5. x402 returns HTTP 402 until the caller pays through **OKX Agent Payments Protocol**.
+6. After payment replay, the service generates the real report, stores it, applies duplicate and quota rules, and returns JSON plus `report_url`.
+7. The user reads the full HTML report at `/agent/reports/{report_token}`.
 
 ## Surfaces
 
@@ -42,7 +43,8 @@ Paid Agent endpoint:
 POST /evaluate
 ```
 
-- x402-protected when `X402_ENABLED=1`.
+- Returns a free intake response with 3 follow-up questions when `answers[]` are missing or incomplete.
+- x402-protected only for the final report replay after intake is complete.
 - Generates the real JSON report.
 - Saves the evaluation.
 - Returns a private tokenized HTML report link.
@@ -115,7 +117,7 @@ OKX_SECRET_KEY=...
 OKX_PASSPHRASE=...
 ```
 
-Unauthenticated calls to `/evaluate` return HTTP 402 with a compact `PAYMENT-REQUIRED` header. `POST /evaluate` is the paid business call that returns the report after settlement. `GET /evaluate` and `HEAD /evaluate` also return a payment challenge in production so OKX.AI marketplace validators do not confuse the endpoint with a free probe. Full request and response schemas remain available through `/a2mcp.json` and `/openapi.json`.
+Unauthenticated calls to `/evaluate` return HTTP 402 only for the final report replay after the intake answers are present. If the request arrives without enough `answers[]`, the server returns a free intake payload with 3 follow-up questions and no payment challenge. `GET /evaluate` and `HEAD /evaluate` still return a payment challenge in production so OKX.AI marketplace validators do not confuse the endpoint with a free probe. Full request and response schemas remain available through `/a2mcp.json` and `/openapi.json`.
 
 The service challenge is configured for X Layer (`eip155:196`) and the OKX-supported USDT contract used by A2MCP service registration. The amount is `5000000`, representing 5 units with 6 decimals. `X402_MODE=sdk` uses OKX's facilitator with synchronous settlement. The older `X402_MODE=okx` compatibility path only validates payment authorization fields locally and does not settle funds; do not use it for production charging.
 
@@ -139,10 +141,14 @@ In `sdk` mode, the FastAPI app uses OKX's Seller SDK (`okxweb3-app-x402`) with `
 
 ## Response Contract
 
-Paid `/evaluate` returns JSON with:
+`POST /evaluate` returns either a free intake payload or the final paid report.
+
+Final paid `/evaluate` returns JSON with:
 
 ```json
 {
+  "mode": "report",
+  "needs_more_info": false,
   "request_id": 1,
   "report_token": "...",
   "report_url": "https://agent-vc-4a3m.onrender.com/agent/reports/{report_token}",
@@ -244,7 +250,7 @@ SERVICE_FEE_USDT=5
 X402_ENABLED=1
 X402_PAY_TO=0xc964dcc547cf0ce07716babb4eb2f4a2f09bf16c
 X402_PRICE=5
-X402_MODE=okx
+X402_MODE=sdk
 X402_NETWORK=eip155:196
 X402_ASSET=0x779ded0c9e1022225f8e0630b35a9b54be713736
 X402_ASSET_NAME=USDT
