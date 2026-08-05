@@ -491,7 +491,7 @@ INDEX_HTML = """<!doctype html>
         </label>
         </details>
         <div class="actions">
-          <button type="button" id="interviewBtn">生成 3 个问题</button>
+          <button type="button" id="interviewBtn">生成引导语和 3 个问题</button>
           <button type="button" id="evaluateBtn">查看两步评估方式</button>
           <button type="button" class="secondary" id="clearBtn">清空回答</button>
         </div>
@@ -504,7 +504,7 @@ INDEX_HTML = """<!doctype html>
         <span class="message" id="runState">ready</span>
       </div>
       <div class="output">
-        <div id="output" class="report-host">点击“生成 3 个问题”或“查看两步评估方式”。</div>
+        <div id="output" class="report-host">点击“生成引导语和 3 个问题”或“查看两步评估方式”。</div>
       </div>
     </section>
   </main>
@@ -684,8 +684,18 @@ INDEX_HTML = """<!doctype html>
       return body;
     }
 
-    function renderQuestions(items) {
+    function renderQuestions(body) {
+      const items = Array.isArray(body?.questions) ? body.questions : [];
+      const introText = String(body?.intro || '').trim();
       questionsEl.innerHTML = '';
+      if (introText) {
+        const intro = document.createElement('p');
+        intro.className = 'message';
+        intro.style.margin = '0';
+        intro.style.lineHeight = '1.6';
+        intro.textContent = introText;
+        questionsEl.appendChild(intro);
+      }
       items.forEach((item, index) => {
         const row = document.createElement('div');
         row.className = 'question-row';
@@ -708,11 +718,11 @@ INDEX_HTML = """<!doctype html>
       setBusy(true, '正在分析项目资料…');
       output.innerHTML = '<p class="message">正在分析项目资料……</p>';
       try {
-        runState.textContent = '正在生成补充问题…';
+        runState.textContent = '正在生成引导语和问题…';
         const body = await postJson('/interview', { project: projectFromForm() });
-        renderQuestions(body.questions || []);
-        output.innerHTML = '<p class="message">补充问题已生成。先回答这些问题，再提交同一份项目资料，系统才会进入付费评估并生成完整报告。</p>';
-        runState.textContent = '补充问题已生成';
+        renderQuestions(body);
+        output.innerHTML = '<p class="message">已经生成一段引导语和 3 个问题。请一次性回答完，再提交同一份项目资料，系统才会进入付费评估并生成完整报告。</p>';
+        runState.textContent = '引导语和问题已生成';
       } catch (error) {
         output.innerHTML = `<span class="error">${error.message}</span>`;
         runState.textContent = 'error';
@@ -864,7 +874,7 @@ def evaluate_request_schema() -> dict[str, Any]:
             },
             "answers": {
                 "type": "array",
-                "description": "Optional answers to the 3 one-round intake questions. When missing or incomplete, POST /evaluate returns the questions first and does not generate the report yet.",
+          "description": "Optional answers to the 3 one-round intake questions. When missing or incomplete, POST /evaluate returns the intro and questions first and does not generate the report yet.",
                 "items": {
                     "type": "object",
                     "required": ["question", "answer"],
@@ -882,7 +892,7 @@ def evaluate_request_schema() -> dict[str, Any]:
 def evaluate_intake_schema() -> dict[str, Any]:
     return {
         "type": "object",
-        "required": ["mode", "needs_more_info", "questions", "next_step"],
+        "required": ["mode", "needs_more_info", "intro", "questions", "next_step"],
         "properties": {
             "mode": {"const": "intake"},
             "needs_more_info": {"const": True},
@@ -894,6 +904,7 @@ def evaluate_intake_schema() -> dict[str, Any]:
                 "type": "array",
                 "items": {"type": "string"},
             },
+            "intro": {"type": "string"},
             "next_step": {"type": "string"},
             "questions": {
                 "type": "array",
@@ -1037,7 +1048,7 @@ def openapi_document(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
                     "responses": {
                         "200": {
                             "description": (
-                                "Either a free intake payload with 3 concise questions or a structured JSON report "
+                                "Either a free intake payload with a short intro plus 3 concise questions or a structured JSON report "
                                 "plus a paid HTML report_url at /agent/reports/{report_token}."
                             )
                         },

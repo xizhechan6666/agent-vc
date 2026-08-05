@@ -54,8 +54,8 @@ Use A2MCP, not A2A, for this product. This is a fixed-price report service, not 
 Expected flow:
 
 1. Agent Client sends `POST /evaluate` with a JSON body matching `inputSchema`.
-2. If `answers[]` are missing or incomplete, the server returns a free intake payload with 3 follow-up questions and no payment challenge.
-3. The founder answers those questions and the Agent Client resubmits the same project with `answers[]`.
+2. If `answers[]` are missing or incomplete, the server returns a free intake payload with a short intro plus 3 questions and no payment challenge.
+3. The founder answers those questions in one round and the Agent Client resubmits the same project with `answers[]`.
 4. The final `POST /evaluate` call returns HTTP 402 when no valid payment proof is present.
 5. The 402 response includes `PAYMENT-REQUIRED` with x402 v2 requirements and Bazaar discovery metadata.
 6. Agent Client asks the user to confirm payment through **OKX Agent Payments Protocol**.
@@ -261,7 +261,7 @@ Expected result:
 
 - If `answers[]` are missing or incomplete:
   - HTTP 200.
-  - The body includes `mode: "intake"` and 3 follow-up questions.
+  - The body includes `mode: "intake"` plus a short intro and 3 questions.
 - If `answers[]` are present and no payment proof is supplied:
   - HTTP 402.
   - `PAYMENT-REQUIRED` header exists.

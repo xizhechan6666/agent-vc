@@ -13,9 +13,9 @@ https://agent-vc-4a3m.onrender.com
 ## Current Product Flow
 
 1. A founder or Agent Client submits an Agent project.
-2. `/interview` can generate three investor follow-up questions.
-3. `POST /evaluate` first returns a free intake payload with 3 follow-up questions when `answers[]` are missing or incomplete.
-4. The founder answers those questions and the Agent Client submits the same project again with `answers[]`.
+2. `/interview` can generate a short intro plus three investor questions.
+3. `POST /evaluate` first returns a free intake payload with a short intro plus 3 questions when `answers[]` are missing or incomplete.
+4. The founder answers those questions in one round and the Agent Client submits the same project again with `answers[]`.
 5. x402 returns HTTP 402 until the caller pays through **OKX Agent Payments Protocol**.
 6. After payment replay, the service generates the real report, stores it, applies duplicate and quota rules, and returns JSON plus `report_url`.
 7. The user reads the full HTML report at `/agent/reports/{report_token}`.
@@ -43,7 +43,7 @@ Paid Agent endpoint:
 POST /evaluate
 ```
 
-- Returns a free intake response with 3 follow-up questions when `answers[]` are missing or incomplete.
+- Returns a free intake response with a short intro plus 3 questions when `answers[]` are missing or incomplete.
 - x402-protected only for the final report replay after intake is complete.
 - Generates the real JSON report.
 - Saves the evaluation.
@@ -117,7 +117,7 @@ OKX_SECRET_KEY=...
 OKX_PASSPHRASE=...
 ```
 
-Unauthenticated calls to `/evaluate` return HTTP 402 only for the final report replay after the intake answers are present. If the request arrives without enough `answers[]`, the server returns a free intake payload with 3 follow-up questions and no payment challenge. `GET /evaluate` and `HEAD /evaluate` still return a payment challenge in production so OKX.AI marketplace validators do not confuse the endpoint with a free probe. Full request and response schemas remain available through `/a2mcp.json` and `/openapi.json`.
+Unauthenticated calls to `/evaluate` return HTTP 402 only for the final report replay after the intake answers are present. If the request arrives without enough `answers[]`, the server returns a free intake payload with a short intro plus 3 questions and no payment challenge. `GET /evaluate` and `HEAD /evaluate` still return a payment challenge in production so OKX.AI marketplace validators do not confuse the endpoint with a free probe. Full request and response schemas remain available through `/a2mcp.json` and `/openapi.json`.
 
 The service challenge is configured for X Layer (`eip155:196`) and the OKX-supported USDT contract used by A2MCP service registration. The amount is `5000000`, representing 5 units with 6 decimals. `X402_MODE=sdk` uses OKX's facilitator with synchronous settlement. The older `X402_MODE=okx` compatibility path only validates payment authorization fields locally and does not settle funds; do not use it for production charging.
 
@@ -224,7 +224,7 @@ For a quick no-x402 local smoke test:
 X402_ENABLED=0 uvicorn server:app --host 127.0.0.1 --port 8787
 ```
 
-Generate follow-up questions:
+Generate the intro plus questions:
 
 ```bash
 curl -s http://127.0.0.1:8787/interview \
@@ -272,7 +272,7 @@ curl -s https://agent-vc-4a3m.onrender.com/owner/simulate \
   --data @sample_request.json
 ```
 
-If `answers` is empty, `/owner/simulate` returns the follow-up questions and a conversation-style preview. If `answers` is present, it returns the final JSON, `client_summary`, and tokenized HTML `report_url`.
+If `answers` is empty, `/owner/simulate` returns the intro, the questions, and a conversation-style preview. If `answers` is present, it returns the final JSON, `client_summary`, and tokenized HTML `report_url`.
 
 Do not commit `OWNER_ACCESS_TOKEN`. Set it only in the deployment environment.
 

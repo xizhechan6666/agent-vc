@@ -429,7 +429,8 @@ def intake_missing_information(project: dict[str, Any]) -> list[str]:
 
 
 def build_intake_response(project: dict[str, Any], answers: list[dict[str, str]], *, owner_preview: bool = False) -> dict[str, Any]:
-    questions = generate_interview(project).get("questions", [])
+    interview = generate_interview(project)
+    questions = interview.get("questions", [])
     return {
         "mode": "intake",
         "needs_more_info": True,
@@ -438,7 +439,8 @@ def build_intake_response(project: dict[str, Any], answers: list[dict[str, str]]
         "required_answer_count": INTAKE_REQUIRED_ANSWER_COUNT,
         "provided_answer_count": len(answers),
         "missing_information": intake_missing_information(project),
-        "next_step": "请把下面 3 个问题一次性回答完，然后把同一份 project 和 answers 再提交到 /evaluate。",
+        "intro": interview.get("intro"),
+        "next_step": "请先看引导语，再把下面 3 个问题一次性回答完，然后把同一份 project 和 answers 再提交到 /evaluate。",
         "questions": questions,
     }
 
@@ -543,12 +545,12 @@ def normalize_answers(value: Any) -> list[dict[str, str]]:
         answers: list[dict[str, str]] = []
         for index, item in enumerate(value, start=1):
             if isinstance(item, dict):
-                question = clean_text(item.get("question") or item.get("q") or f"补充问题 {index}")
+                question = clean_text(item.get("question") or item.get("q") or f"问题 {index}")
                 answer = clean_text(item.get("answer") or item.get("a") or item.get("content") or item.get("text"))
                 if answer:
                     answers.append({"question": question, "answer": answer})
             elif clean_text(item):
-                answers.append({"question": f"补充说明 {index}", "answer": clean_text(item)})
+                answers.append({"question": f"问题 {index}", "answer": clean_text(item)})
         return answers
     if isinstance(value, dict):
         return [
@@ -1207,14 +1209,15 @@ async def owner_interview(payload: dict[str, Any], request: Request) -> dict[str
     project = payload.get("project", payload)
     if not isinstance(project, dict):
         raise HTTPException(status_code=400, detail="invalid_project")
-    questions = generate_interview(project)
+    interview = generate_interview(project)
     return {
         "owner_preview": True,
         "payment_required": False,
         "next_step": "answer_questions",
-        "questions": questions.get("questions", []),
+        "intro": interview.get("intro"),
+        "questions": interview.get("questions", []),
         "agent_client_style_message": (
-            "我会一次性问 3 个最关键的问题。你回答后，我会生成完整评分、投资结论、"
+            "我会先给你一段简短引导语，再一次性问 3 个最关键的问题。你回答后，我会生成完整评分、投资结论、"
             "改进建议和 HTML 报告链接。"
         ),
     }
@@ -1244,7 +1247,9 @@ async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str,
     require_owner(request)
     project, answers = normalize_evaluation_payload(payload)
 
-    questions = generate_interview(project).get("questions", [])
+    interview = generate_interview(project)
+    questions = interview.get("questions", [])
+    intro = interview.get("intro")
     conversation: list[dict[str, Any]] = [
         {
             "role": "user",
@@ -1260,7 +1265,7 @@ async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str,
         {"role": "user", "content": project},
         {
             "role": "agent",
-            "content": "我会一次性问 3 个最关键的问题，帮你补齐写报告所需的信息，再生成最终投资评估。",
+            "content": intro or "请你先简单介绍一下你的 Agent，包括它的名字、内容等。参考问题如下（内容越详细，越有利于我们对你做出完善的评估）：",
             "questions": questions,
         },
     ]
@@ -1272,6 +1277,7 @@ async def owner_simulate(payload: dict[str, Any], request: Request) -> dict[str,
             "stage": "questions_ready",
             "next_step": "POST the same payload with answers[] to /owner/simulate or /owner/evaluate, and answer the 3 questions in one round.",
             "conversation": conversation,
+            "intro": intro,
             "questions": questions,
         }
 

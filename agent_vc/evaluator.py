@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from . import llm
-from .prompt import INTERVIEW_PROMPT, REPORT_SCHEMA_HINT, SYSTEM_PROMPT
+from .prompt import INTERVIEW_INTRO_TEXT, INTERVIEW_PROMPT, REPORT_SCHEMA_HINT, SYSTEM_PROMPT
 from .store import quota_preview
 from .wallet_research import build_wallet_research, wallet_bonus, wallet_evidence_lines
 
@@ -55,11 +55,13 @@ def generate_interview(project: dict[str, Any]) -> dict[str, Any]:
     try:
         result = llm.call_json(INTERVIEW_PROMPT, payload)
         if isinstance(result.get("questions"), list) and result["questions"]:
+            result.setdefault("intro", INTERVIEW_INTRO_TEXT)
             return result
     except llm.LLMError:
         pass
 
     return {
+        "intro": INTERVIEW_INTRO_TEXT,
         "questions": [
             {
                 "id": "q1",

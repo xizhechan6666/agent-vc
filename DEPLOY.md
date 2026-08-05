@@ -77,7 +77,7 @@ Current registration values:
 ```json
 {
   "serviceName": "Agent VC Investment Diagnosis",
-  "serviceDescription": "① `/evaluate` 先对缺失的项目资料生成 3 个追问，帮助用户补齐关键信息。\n② 用户回答后，付费 Agent Client 再提交同一份 project + answers，触发 x402 并生成最终投资诊断。\n③ 最终返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。",
+  "serviceDescription": "① `/evaluate` 先对缺失的项目资料生成一段引导语和 3 个问题，帮助用户一次性补齐关键信息。\n② 用户回答后，付费 Agent Client 再提交同一份 project + answers，触发 x402 并生成最终投资诊断。\n③ 最终返回结构化 JSON、投资/奖励门控结果、数据库同步状态，以及独立 HTML 报告链接 report_url。",
   "serviceType": "A2MCP",
   "fee": "5",
   "endpoint": "https://agent-vc-4a3m.onrender.com/evaluate"
@@ -100,7 +100,7 @@ Expected response:
 
 - If `answers[]` are missing or incomplete:
   - HTTP 200.
-  - The body contains `mode: "intake"` and 3 follow-up questions.
+  - The body contains `mode: "intake"` plus a short intro and 3 questions.
 - If `answers[]` are present and payment is still unpaid:
   - HTTP 402.
   - `PAYMENT-REQUIRED` header exists.
@@ -120,7 +120,7 @@ The web page at `/` is not the paid report endpoint.
 It can:
 
 - Explain the product.
-- Generate non-paid follow-up questions through `/interview`.
+- Generate the intro plus questions through `/interview`.
 - Show the project JSON that should be submitted through Agent Client.
 
 Production boundaries:
